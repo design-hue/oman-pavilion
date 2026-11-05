@@ -66,7 +66,7 @@ window.KIOSK_CONFIG = {
       icon: "assets/sun.png",
       color: "#f2b23c",
       type: "web",
-      mode: "embed",
+      mode: "page",
       src: "https://experienceoman.om/weather"
     }
   ]

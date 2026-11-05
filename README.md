@@ -24,6 +24,8 @@ Static website for GitHub Pages. No server, no sign-in.
 - Optional: also save every visitor to a **Google Sheet** – see `google-sheet/README.txt`.
 
 ## Get to Know Oman
-- Edit buttons, titles and links in `get-to-know-oman/config.js`.
-- The Weather button shows experienceoman.om inside the page if that site allows it;
-  otherwise use the **Open website ↗** button in the top bar.
+- English-only 1920×1080 touch screen: General Facts, National Indicators, Visual Identity,
+  Visitor Journey (floor plan with zones) and live Weather (Open-Meteo, inside the screen).
+- Swipe or use the arrows to move between topics; **Home** returns to the start.
+- After 80 seconds without a touch it asks "Still exploring?" and then goes back to the start.
+- All texts are in `get-to-know-oman/index.html`; images are in `get-to-know-oman/assets/`.

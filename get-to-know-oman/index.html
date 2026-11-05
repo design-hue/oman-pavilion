@@ -86,6 +86,45 @@ h1{font-weight:700;font-size:calc(8.2*var(--u));line-height:1.05;margin-top:calc
 
 /* portrait screens: 2 columns */
 @media (orientation:portrait){ :root{--u:min(1vw,.56vh)} .grid{grid-template-columns:repeat(2,1fr);width:86vw} .btn:last-child{grid-column:1 / span 2;justify-self:center;width:calc(50% - 1.3*var(--u))} h1{font-size:calc(7*var(--u))} }
+
+/* ---------------- LIVE WEATHER (Open-Meteo) ---------------- */
+#wx{position:absolute;inset:0;display:none;grid-template-columns:minmax(0,1.08fr) minmax(0,1fr);gap:calc(2.6*var(--u));padding:calc(3*var(--u)) calc(3.6*var(--u));
+  background:radial-gradient(120% 90% at 20% 10%,var(--plum-light) 0%,var(--plum) 45%,var(--plum-dark) 100%)}
+#viewer.wx #wx{display:grid}
+#viewer.wx #frame,#viewer.wx .loading,#viewer.wx #img{display:none!important}
+.wx-main{background:var(--cream);color:var(--plum);border-radius:calc(2.6*var(--u));padding:calc(3.2*var(--u)) calc(3.6*var(--u));display:flex;flex-direction:column;min-height:0}
+.wx-city{display:flex;align-items:baseline;justify-content:space-between;gap:calc(2*var(--u))}
+.wx-city b{font-weight:700;font-size:calc(5.2*var(--u));line-height:1.1}
+.wx-city span{font-weight:700;font-size:calc(4.4*var(--u));line-height:1.3}
+.wx-now{display:flex;align-items:center;gap:calc(3*var(--u));margin-top:calc(3*var(--u))}
+.wx-now svg{width:calc(21*var(--u));height:calc(21*var(--u));flex:none}
+.wx-temp{font-weight:700;font-size:calc(19*var(--u));line-height:.95;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.wx-temp sup{font-size:.42em;vertical-align:.95em;margin-left:.04em}
+.wx-cond{font-weight:600;font-size:calc(3.2*var(--u));margin-top:calc(.6*var(--u))}
+.wx-meta{display:flex;gap:calc(3*var(--u));margin-top:calc(2.4*var(--u));font-size:calc(2.6*var(--u));font-weight:500;opacity:.85}
+.wx-days{margin-top:auto;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:calc(1.2*var(--u));padding-top:calc(2.4*var(--u))}
+.wx-day{background:rgba(89,27,88,.08);border-radius:calc(1.6*var(--u));padding:calc(1.6*var(--u)) calc(.8*var(--u));text-align:center;display:flex;flex-direction:column;align-items:center;gap:calc(.6*var(--u))}
+.wx-day b{font-size:calc(2.2*var(--u));font-weight:700}
+.wx-day svg{width:calc(6*var(--u));height:calc(6*var(--u))}
+.wx-day span{font-size:calc(2.2*var(--u));font-weight:600;font-variant-numeric:tabular-nums}
+.wx-day span i{font-style:normal;opacity:.6;font-weight:500}
+.wx-side{display:flex;flex-direction:column;gap:calc(2*var(--u));min-height:0}
+.wx-cities{flex:1;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));grid-auto-rows:1fr;gap:calc(1.4*var(--u));min-height:0}
+.wx-tile{border:2px solid transparent;border-radius:calc(2*var(--u));background:var(--card);color:var(--white);display:flex;align-items:center;gap:calc(1.4*var(--u));padding:0 calc(2*var(--u));text-align:left;font-family:inherit;min-height:0}
+.wx-tile.sel{border-color:var(--cream);background:rgba(255,226,179,.14)}
+.wx-tile:active{transform:scale(.98)}
+.wx-tile svg{width:calc(5.4*var(--u));height:calc(5.4*var(--u));flex:none;color:var(--cream)}
+.wx-tile .n{flex:1;min-width:0;display:flex;flex-direction:column}
+.wx-tile .n b{font-size:calc(2.6*var(--u));font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wx-tile .n span{font-size:calc(2*var(--u));color:var(--lilac)}
+.wx-tile .t{font-size:calc(4*var(--u));font-weight:700;font-variant-numeric:tabular-nums}
+.wx-foot{display:flex;align-items:center;gap:calc(2*var(--u));background:var(--card);border-radius:calc(2*var(--u));padding:calc(1.4*var(--u)) calc(2*var(--u))}
+.wx-qr{width:calc(11*var(--u));height:calc(11*var(--u));background:#fff;border-radius:calc(1*var(--u));padding:calc(.5*var(--u));flex:none}
+.wx-qr svg{width:100%;height:100%;display:block}
+.wx-foot p{font-size:calc(2.2*var(--u));line-height:1.35;color:var(--lilac)}
+.wx-foot p b{display:block;color:var(--cream);font-size:calc(2.5*var(--u))}
+#vOpen[hidden]{display:none!important}
+.wx-msg{grid-column:1/-1;align-self:center;text-align:center;font-size:calc(3*var(--u));color:var(--lilac)}
 </style>
 </head>
 <body oncontextmenu="return false">
@@ -111,6 +150,7 @@ h1{font-weight:700;font-size:calc(8.2*var(--u));line-height:1.05;margin-top:calc
   <div class="frame-wrap">
     <div class="loading" id="loading">Loading…</div>
     <iframe id="frame" title="Content" allow="fullscreen; autoplay"></iframe>
+    <div id="wx" aria-live="polite"></div>
     <img id="img" alt="">
     <button class="float-home" id="homeBtn2" aria-label="Back to home">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5 8 12l7 7"/></svg>Home
@@ -120,7 +160,7 @@ h1{font-weight:700;font-size:calc(8.2*var(--u));line-height:1.05;margin-top:calc
 
 <div id="warn"><div class="warn-card"><h2>Still exploring?</h2><p>Returning to the home screen in <b id="count">10</b> seconds</p><button id="stay">Continue</button></div></div>
 
-<script src="config.js?v=2"></script>
+<script src="config.js?v=3"></script>
 <script>
 (() => {
   const C = window.KIOSK_CONFIG, $ = id => document.getElementById(id);
@@ -130,7 +170,7 @@ h1{font-weight:700;font-size:calc(8.2*var(--u));line-height:1.05;margin-top:calc
   C.buttons.forEach((b, i) => {
     const el = document.createElement('button');
     el.className = 'btn'; el.style.setProperty('--accent', b.color || '#ffe2b3'); el.style.setProperty('--d', (i * -1.1) + 's');
-    el.innerHTML = `<span class="tag">${b.type === 'web' ? 'WEB' : 'PDF'}</span><img src="${b.icon}" alt=""><span class="lbl"></span><span class="sub"></span>`;
+    el.innerHTML = `<span class="tag">${b.type === 'web' ? 'WEB' : b.type === 'weather' ? 'LIVE' : 'PDF'}</span><img src="${b.icon}" alt=""><span class="lbl"></span><span class="sub"></span>`;
     el.querySelector('.lbl').textContent = b.label; el.querySelector('.sub').textContent = b.sub || '';
     el.addEventListener('pointerdown', e => {
       const r = el.getBoundingClientRect(), s = Math.max(r.width, r.height), rp = document.createElement('span');
@@ -146,7 +186,84 @@ h1{font-weight:700;font-size:calc(8.2*var(--u));line-height:1.05;margin-top:calc
 
   // ---------- viewer ----------
   const frame = $('frame');
+  // ---------- live weather (Open-Meteo, no key needed) ----------
+  const CITIES = [
+    ['Muscat', 'مسقط', 23.588, 58.383], ['Salalah', 'صلالة', 17.019, 54.089], ['Nizwa', 'نزوى', 22.933, 57.530], ['Sur', 'صور', 22.566, 59.529],
+    ['Sohar', 'صحار', 24.347, 56.709], ['Khasab', 'خصب', 26.180, 56.248], ['Duqm', 'الدقم', 19.662, 57.705], ['Jabal Akhdar', 'الجبل الأخضر', 23.070, 57.660]
+  ];
+  const WX_QR = `<svg class="wx-qrsvg" shape-rendering="crispEdges" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 33 33" class="segno"><path fill="#fff" d="M0 0h33v33h-33z"/><path class="qrline" stroke="#3a0f3a" d="M2 2.5h7m2 0h1m5 0h2m1 0h1m1 0h1m1 0h7m-29 1h1m5 0h1m1 0h3m2 0h2m1 0h2m4 0h1m5 0h1m-29 1h1m1 0h3m1 0h1m1 0h1m2 0h1m1 0h1m1 0h1m2 0h3m1 0h1m1 0h3m1 0h1m-29 1h1m1 0h3m1 0h1m1 0h1m1 0h2m4 0h2m1 0h2m1 0h1m1 0h3m1 0h1m-29 1h1m1 0h3m1 0h1m5 0h1m2 0h6m1 0h1m1 0h3m1 0h1m-29 1h1m5 0h1m2 0h2m1 0h1m2 0h1m1 0h1m2 0h1m1 0h1m5 0h1m-29 1h7m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h7m-21 1h2m1 0h1m2 0h3m-17 1h1m5 0h1m1 0h1m2 0h2m4 0h1m3 0h2m2 0h3m-26 1h1m1 0h2m1 0h1m1 0h1m1 0h3m2 0h4m1 0h1m1 0h2m1 0h2m-27 1h2m1 0h1m1 0h1m1 0h1m1 0h1m1 0h4m4 0h2m1 0h2m-24 1h1m1 0h2m3 0h2m1 0h1m1 0h1m6 0h1m1 0h4m-23 1h2m1 0h1m2 0h1m3 0h1m1 0h2m1 0h1m1 0h1m1 0h2m4 0h1m-26 1h2m4 0h2m6 0h4m1 0h3m2 0h2m-28 1h1m1 0h1m1 0h3m1 0h1m1 0h2m2 0h1m1 0h1m2 0h3m1 0h3m-27 1h3m1 0h2m4 0h3m2 0h2m2 0h1m1 0h2m1 0h1m1 0h1m1 0h1m-28 1h3m1 0h2m1 0h1m6 0h3m1 0h1m3 0h1m1 0h2m-27 1h2m1 0h3m3 0h1m2 0h5m2 0h2m1 0h3m1 0h3m-29 1h3m1 0h5m3 0h1m2 0h1m3 0h1m2 0h4m2 0h1m-29 1h1m2 0h2m2 0h3m1 0h3m2 0h1m3 0h2m-22 1h1m2 0h1m2 0h1m1 0h4m2 0h2m1 0h1m2 0h5m1 0h3m-21 1h1m3 0h1m1 0h2m2 0h1m1 0h1m3 0h2m-26 1h7m5 0h1m2 0h1m3 0h2m1 0h1m1 0h3m-27 1h1m5 0h1m2 0h1m4 0h1m4 0h2m3 0h1m2 0h1m-28 1h1m1 0h3m1 0h1m2 0h1m2 0h3m1 0h1m2 0h7m1 0h2m-29 1h1m1 0h3m1 0h1m2 0h4m1 0h3m1 0h4m1 0h1m1 0h2m1 0h1m-29 1h1m1 0h3m1 0h1m2 0h1m2 0h4m2 0h1m2 0h7m-28 1h1m5 0h1m2 0h5m7 0h1m1 0h4m1 0h1m-29 1h7m1 0h1m3 0h2m1 0h3m1 0h1m1 0h4m1 0h1"/></svg>`;
+  const IC = {
+    sun: '<circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M5.3 18.7l1.6-1.6M17.1 6.9l1.6-1.6"/>',
+    moon: '<path d="M19.5 14.6A7.8 7.8 0 0 1 9.4 4.5a7.8 7.8 0 1 0 10.1 10.1z"/>',
+    part: '<circle cx="8.6" cy="8.6" r="3.3"/><path d="M8.6 2.4v1.4M2.4 8.6h1.4M4.2 4.2l1 1M13 4.2l-1 1"/><path d="M8.5 19.5h9a3.6 3.6 0 0 0 .3-7.2 5 5 0 0 0-9.4 1.2 3 3 0 0 0 .1 6z"/>',
+    cloud: '<path d="M7 19h10.5a4.2 4.2 0 0 0 .4-8.4 6 6 0 0 0-11.5 1.6A3.4 3.4 0 0 0 7 19z"/>',
+    fog: '<path d="M7 13.5h10.5a4.2 4.2 0 0 0 .4-8.4 6 6 0 0 0-11.5 1.6A3.4 3.4 0 0 0 7 13.5z"/><path d="M4 17h16M6 20.5h12"/>',
+    rain: '<path d="M7 15h10.5a4.2 4.2 0 0 0 .4-8.4 6 6 0 0 0-11.5 1.6A3.4 3.4 0 0 0 7 15z"/><path d="M8.5 18l-1 2.5M12.5 18l-1 2.5M16.5 18l-1 2.5"/>',
+    storm: '<path d="M7 14.5h10.5a4.2 4.2 0 0 0 .4-8.4 6 6 0 0 0-11.5 1.6A3.4 3.4 0 0 0 7 14.5z"/><path d="M12.5 15.5l-2.5 3.5h3.2l-2 3"/>',
+    snow: '<path d="M7 14h10.5a4.2 4.2 0 0 0 .4-8.4 6 6 0 0 0-11.5 1.6A3.4 3.4 0 0 0 7 14z"/><path d="M9 18h.01M12 20h.01M15 18h.01"/>'
+  };
+  function wxInfo(code, day) {
+    if (code === 0) return [day === 0 ? 'moon' : 'sun', 'Clear sky'];
+    if (code === 1) return [day === 0 ? 'moon' : 'sun', 'Mainly clear'];
+    if (code === 2) return ['part', 'Partly cloudy'];
+    if (code === 3) return ['cloud', 'Overcast'];
+    if (code === 45 || code === 48) return ['fog', 'Fog'];
+    if (code >= 51 && code <= 57) return ['rain', 'Drizzle'];
+    if ((code >= 61 && code <= 67) || (code >= 80 && code <= 82)) return ['rain', 'Rain'];
+    if ((code >= 71 && code <= 77) || code === 85 || code === 86) return ['snow', 'Snow'];
+    if (code >= 95) return ['storm', 'Thunderstorm'];
+    return ['part', '—'];
+  }
+  const ico = k => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${IC[k]}</svg>`;
+  const deg = v => Math.round(v);
+  let wxSel = 0, wxData = null, wxAt = 0;
+  try { const c = JSON.parse(localStorage.getItem('wx-cache') || 'null'); if (c) { wxData = c.data; wxAt = c.at; } } catch (e) {}
+  async function wxLoad() {
+    const lat = CITIES.map(c => c[2]).join(','), lon = CITIES.map(c => c[3]).join(',');
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
+      '&current=temperature_2m,relative_humidity_2m,wind_speed_10m,weather_code,is_day' +
+      '&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=Asia%2FMuscat&forecast_days=5';
+    const r = await fetch(url); if (!r.ok) throw new Error('HTTP ' + r.status);
+    let d = await r.json(); if (!Array.isArray(d)) d = [d];
+    wxData = d; wxAt = Date.now();
+    try { localStorage.setItem('wx-cache', JSON.stringify({ at: wxAt, data: d })); } catch (e) {}
+  }
+  function wxRender(note) {
+    const box = $('wx');
+    if (!wxData) { box.innerHTML = `<p class="wx-msg">${note || 'Loading the latest weather…'}</p>`; return; }
+    const c = CITIES[wxSel], d = wxData[wxSel], cur = d.current, [k, cond] = wxInfo(cur.weather_code, cur.is_day);
+    const days = d.daily.time.map((t, i) => {
+      const dt = new Date(t + 'T12:00:00');
+      const lbl = i === 0 ? 'Today' : dt.toLocaleDateString('en-GB', { weekday: 'short' });
+      return `<div class="wx-day"><b>${lbl}</b>${ico(wxInfo(d.daily.weather_code[i], 1)[0])}<span>${deg(d.daily.temperature_2m_max[i])}° <i>${deg(d.daily.temperature_2m_min[i])}°</i></span></div>`;
+    }).join('');
+    const tiles = CITIES.map((cc, i) => { const x = wxData[i] && wxData[i].current; if (!x) return '';
+      return `<button class="wx-tile${i === wxSel ? ' sel' : ''}" data-i="${i}" type="button">${ico(wxInfo(x.weather_code, x.is_day)[0])}<span class="n"><b>${cc[0]}</b><span dir="rtl" lang="ar">${cc[1]}</span></span><span class="t">${deg(x.temperature_2m)}°</span></button>`; }).join('');
+    const upd = new Date(wxAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Muscat' });
+    box.innerHTML = `<div class="wx-main"><div class="wx-city"><b>${c[0]}</b><span dir="rtl" lang="ar">${c[1]}</span></div>
+      <div class="wx-now">${ico(k)}<div><div class="wx-temp">${deg(cur.temperature_2m)}<sup>°C</sup></div><div class="wx-cond">${cond}</div></div></div>
+      <div class="wx-meta"><span>Humidity ${deg(cur.relative_humidity_2m)}%</span><span>Wind ${deg(cur.wind_speed_10m)} km/h</span></div>
+      <div class="wx-days">${days}</div></div>
+      <div class="wx-side"><div class="wx-cities">${tiles}</div>
+      <div class="wx-foot"><div class="wx-qr">${WX_QR}</div><p><b>More on experienceoman.om</b>Scan for the full Oman weather on your phone. Updated ${upd} (Oman time)${note ? ' · ' + note : ''}.</p></div></div>`;
+    box.querySelectorAll('.wx-tile').forEach(t => t.addEventListener('click', () => { wxSel = +t.dataset.i; wxRender(note); }));
+  }
+  async function openWeather(b) {
+    $('viewer').classList.remove('full'); $('viewer').classList.add('wx');
+    $('vIcon').src = b.icon; $('vTitle').textContent = b.label; $('vSub').textContent = b.sub || '';
+    $('vOpen').hidden = true; frame.src = 'about:blank';
+    $('home').classList.add('hidden'); $('viewer').classList.add('open'); $('viewer').setAttribute('aria-hidden', 'false');
+    resetIdle();
+    wxRender();
+    if (!wxData || Date.now() - wxAt > 10 * 60 * 1000) {
+      try { await wxLoad(); wxRender(); }
+      catch (e) { wxRender(wxData ? 'showing the last saved forecast' : 'Weather is not available right now. Check the internet connection and try again.'); }
+    }
+  }
+
   function open(b) {
+    if (b.type === 'weather') { openWeather(b); return; }
+    $('viewer').classList.remove('wx');
     if (b.type === 'web' && b.mode === 'page') { location.href = b.src; return; }
     const full = b.type === 'pdf' && !!b.image;
     $('viewer').classList.toggle('full', full);
@@ -167,7 +284,7 @@ h1{font-weight:700;font-size:calc(8.2*var(--u));line-height:1.05;margin-top:calc
   }
   function goHome() {
     $('viewer').classList.remove('open'); $('viewer').setAttribute('aria-hidden', 'true'); $('home').classList.remove('hidden');
-    hideWarn(); setTimeout(() => { frame.src = 'about:blank'; $('img').removeAttribute('src'); $('viewer').classList.remove('full'); }, 450);   // stop videos/audio and free memory
+    hideWarn(); setTimeout(() => { frame.src = 'about:blank'; $('img').removeAttribute('src'); $('viewer').classList.remove('full'); $('viewer').classList.remove('wx'); }, 450);   // stop videos/audio and free memory
   }
   $('homeBtn').addEventListener('click', goHome); $('homeBtn2').addEventListener('click', goHome);
 

@@ -5,6 +5,7 @@
                      Optional "image": a full-screen picture of the page (JPG/PNG, same name).
                      When "image" is set the page opens edge-to-edge, sharp, with no PDF toolbar.
                      Remove the "image" line to show the PDF itself (use this for multi-page PDFs).
+   • type: "weather" -> live Oman weather inside the screen (data: Open-Meteo, needs internet)
    • type: "web"  -> write the full web address (https://...) in src.
                      mode "embed" = opens inside the kiosk with a Home button (default)
                      mode "page"  = opens the website itself (use only if "embed" shows a blank /
@@ -62,12 +63,10 @@ window.KIOSK_CONFIG = {
     },
     {
       label: "Weather",
-      sub: "experienceoman.om",
+      sub: "Live forecast · Oman",
       icon: "assets/sun.png",
       color: "#f2b23c",
-      type: "web",
-      mode: "page",
-      src: "https://experienceoman.om/weather"
+      type: "weather"
     }
   ]
 };

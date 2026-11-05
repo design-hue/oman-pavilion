@@ -1,0 +1,683 @@
+<!doctype html>
+<html lang="en"><head>
+<title>Registration Screen</title><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+</head><body>
+<script>
+/* =====================================================================
+   SETTINGS – the only line you may need to edit
+   SHEET_URL: paste your Google Apps Script web-app URL to also save every visitor to a
+   Google Sheet (see google-sheet/README). Leave "" to keep registrations only on this kiosk.
+   ===================================================================== */
+const SHEET_URL = "";
+
+(() => {
+  const KEY = "opr-visitors", QKEY = "opr-sheet-queue";
+  const get = (k, d) => { try { return JSON.parse(localStorage.getItem(k) || d); } catch (e) { return JSON.parse(d); } };
+  const put = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} };
+  let dn = null; try { dn = new Intl.DisplayNames(["en"], { type: "region" }); } catch (e) {}
+  const country = c => { try { return (dn && dn.of(c)) || c; } catch (e) { return c; } };
+  const pad = n => String(n).padStart(2, "0");
+  let sending = false;
+  async function send() {
+    if (!SHEET_URL || sending) return; sending = true;
+    try {
+      let q = get(QKEY, "[]");
+      while (q.length) {
+        try { await fetch(SHEET_URL, { method: "POST", mode: "no-cors", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify(q[0]) }); }
+        catch (e) { break; }
+        q.shift(); put(QKEY, q);
+      }
+    } finally { sending = false; }
+  }
+  setInterval(send, 20000); window.addEventListener("online", send); send();
+  window.kioskAPI = {
+    async register(rec) {
+      const r = { name: String(rec.name || "").trim().slice(0, 80), country: String(rec.country || "").slice(0, 2), countryName: country(rec.country),
+                  lang: rec.lang === "ar" ? "ar" : "en", ts: rec.ts || new Date().toISOString(), day: rec.day, hour: rec.hour };
+      const all = get(KEY, "[]"); all.push(r); put(KEY, all);
+      if (SHEET_URL) { const q = get(QKEY, "[]"); q.push(r); put(QKEY, q); send(); }
+      return { ok: true, number: all.length };
+    },
+    async list() { return get(KEY, "[]"); },
+    async info() { return { dir: SHEET_URL ? "This kiosk + your Google Sheet" : "This kiosk's browser only", startup: false }; },
+    async exportCsv() {
+      const esc = v => { const s = String(v == null ? "" : v); return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+      const rows = get(KEY, "[]").map(r => { const d = new Date(r.ts); return [r.day, pad(d.getHours()) + ":" + pad(d.getMinutes()), r.name, r.countryName || country(r.country), r.country, r.lang === "ar" ? "Arabic" : "English"].map(esc).join(","); });
+      const blob = new Blob(["﻿" + ["Date,Time,Name,Country,Country code,Language", ...rows].join("\r\n")], { type: "text/csv;charset=utf-8" });
+      const a = document.createElement("a"); const d = new Date();
+      a.href = URL.createObjectURL(blob); a.download = `oman-pavilion-visitors-${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}.csv`;
+      document.body.append(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+      return "Downloaded " + rows.length + " visitors.";
+    }
+  };
+})();
+</script>
+<title>Oman Pavilion Registration</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+@font-face{font-family:"IBM Plex Sans Arabic";src:url("fonts/IBMPlexSansArabic-Regular.ttf");font-weight:400}
+@font-face{font-family:"IBM Plex Sans Arabic";src:url("fonts/IBMPlexSansArabic-SemiBold.ttf");font-weight:600}
+@font-face{font-family:"IBM Plex Sans Arabic";src:url("fonts/IBMPlexSansArabic-Bold.ttf");font-weight:700}
+.w-foot{display:none!important}
+.dash-path{font-size:13px;color:var(--soft);word-break:break-all}
+.btn.danger{border-color:#a2475f;color:#ffc2cf}
+/* Layout (follows the designer's welcome screen): landscape 1920 x 1080 touch kiosk (stacks for portrait screens and phones) (welcome -> name -> country -> thank you) with COP31 shapes slowly
+   rotating behind it, plus a staff dashboard at #dashboard. One deliberate look: Oman Pavilion purple, gold, cream. */
+:root{
+  --bg:#3a0d39; --bg-2:#4a1349; --brand:#591b58; --card:#6a2a69; --card-2:#7a3a78; --line:#854b76;
+  --gold:#fcaf17; --cream:#ffe2b3; --ink:#ffffff; --muted:#e9cfe6; --soft:#c9a3c5; --good:#70c6aa; --bad:#ff8fa3;
+  --f:"IBM Plex Sans Arabic", "Segoe UI", Tahoma, system-ui, sans-serif;
+  --r-lg:28px; --r-md:16px;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--f);-webkit-tap-highlight-color:transparent;overflow-x:hidden;
+  padding-left:max(16px, env(safe-area-inset-left, 0px));padding-right:max(16px, env(safe-area-inset-right, 0px));padding-block:0;
+  background-image:radial-gradient(110% 60% at 50% 0%, #74306f 0%, var(--brand) 45%, var(--bg) 100%);background-attachment:fixed}
+button{font-family:inherit;color:inherit;cursor:pointer}
+button:focus-visible,input:focus-visible,a:focus-visible{outline:3px solid var(--gold);outline-offset:3px}
+h1,h2,h3{margin:0;text-wrap:balance}
+p{margin:0}
+.tab{font-variant-numeric:tabular-nums}
+
+/* ---------- rotating COP shapes (always on, behind everything) ---------- */
+.orbit{position:fixed;inset:0;pointer-events:none;overflow:hidden;z-index:0}
+.orbit img{position:absolute;max-width:none;filter:drop-shadow(0 24px 40px rgba(20,0,20,.45));transition:opacity .6s, transform .6s}
+@keyframes spin{to{rotate:360deg}}
+@keyframes bob{0%,100%{translate:0 0}50%{translate:0 -18px}}
+.sp{animation:spin var(--d,60s) linear infinite, bob 9s ease-in-out infinite}
+.sp.rev{animation-direction:reverse, normal}
+.o1{width:clamp(180px,34vw,380px);top:-8%;right:-17%;--d:70s}
+.o2{width:clamp(150px,28vw,320px);top:33%;left:-16%;--d:55s}
+.o3{width:clamp(200px,40vw,440px);bottom:-7%;right:-14%;--d:80s}
+.o4{width:clamp(140px,26vw,290px);bottom:7%;left:-9%;--d:48s}
+body.busy .orbit img{opacity:.2}
+body.calm .orbit img{opacity:.4}
+body.dash .orbit{display:none}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+/* ================= KIOSK ================= */
+#kiosk{position:relative;z-index:1;height:100%;display:flex;flex-direction:column;max-width:1000px;margin:0 auto;padding-block:clamp(18px,2.4vh,44px);user-select:none;-webkit-user-select:none}
+.kbar{display:flex;align-items:center;gap:12px;min-height:64px}
+.kbar .spacer{flex:1}
+.ghost{background:rgba(58,13,57,.55);border:1.5px solid var(--line);border-radius:999px;padding:10px 24px;font-size:clamp(17px,2vw,24px);font-weight:600;color:var(--cream);min-height:clamp(52px,3.4vh,68px)}
+.ghost:active{background:var(--card)}
+.dots{display:flex;gap:10px;align-items:center}
+.dots i{width:14px;height:14px;border-radius:50%;background:var(--line)}
+.dots i.on{background:var(--gold);width:40px;border-radius:99px}
+.dots i.done{background:var(--cream)}
+.screen{flex:1;display:flex;flex-direction:column;min-height:0;gap:clamp(16px,2vh,34px);padding-top:clamp(14px,2.5vh,48px)}
+.q{font-weight:700;font-size:clamp(34px,6.2vw,72px);line-height:1.12;color:var(--ink)}
+.hint{font-size:clamp(17px,2.2vw,26px);color:var(--muted)}
+
+/* welcome */
+.welcome{align-items:center;text-align:center;justify-content:space-between;padding-top:clamp(20px,5vh,110px)}
+.wtop{display:flex;flex-direction:column;gap:clamp(10px,1.6vh,26px);align-items:center}
+.eyebrow{font-weight:600;font-size:clamp(14px,1.9vw,22px);letter-spacing:.24em;text-transform:uppercase;color:var(--cream)}
+.w-en{font-weight:700;font-size:clamp(40px,8.6vw,100px);line-height:1.04;color:var(--gold)}
+.w-ar{font-weight:700;font-size:clamp(34px,7.4vw,86px);line-height:1.3;color:var(--cream)}
+.w-sub{font-size:clamp(17px,2.4vw,28px);color:var(--muted)}
+.langs{display:flex;flex-direction:column;gap:clamp(16px,2vh,32px);width:min(100%,860px)}
+.lang{position:relative;overflow:hidden;width:100%;min-height:clamp(150px,13.5vh,260px);border-radius:var(--r-lg);border:0;background:var(--cream);color:var(--brand);
+  display:flex;align-items:center;gap:clamp(14px,3vw,36px);padding:0 clamp(20px,4vw,48px);text-align:start;box-shadow:0 24px 50px rgba(20,0,20,.38);transition:transform .15s}
+.lang:active{transform:scale(.98)}
+.lang .shape{width:clamp(110px,18vw,200px);flex:none;animation:spin var(--d,24s) linear infinite}
+.lang .txt{display:flex;flex-direction:column;gap:2px;min-width:0}
+.lang b{font-size:clamp(34px,6vw,68px);line-height:1.1}
+.lang span{font-size:clamp(17px,2.4vw,28px);font-weight:600;opacity:.75}
+.lang .go{margin-inline-start:auto;width:clamp(54px,7vw,82px);height:clamp(54px,7vw,82px);border-radius:50%;background:var(--brand);color:var(--cream);display:grid;place-items:center;flex:none}
+.lang .go svg{width:50%;height:50%}
+.lang[dir=rtl] .go svg{transform:scaleX(-1)}
+.pulse{display:inline-flex;align-items:center;gap:12px;color:var(--muted);font-size:clamp(16px,2.2vw,26px)}
+.pulse i{width:12px;height:12px;border-radius:50%;background:var(--gold);animation:pulse 1.8s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:.35;transform:scale(.8)}50%{opacity:1;transform:scale(1.15)}}
+.w-foot{width:100%;display:flex;justify-content:space-between;align-items:center;gap:12px;font-size:14px;color:var(--soft)}
+.mark{display:flex;align-items:center;gap:10px;padding:8px 6px;border-radius:12px;background:transparent;border:0;color:var(--soft);font-size:14px;letter-spacing:.08em}
+.mark .ring{width:30px;height:30px;border-radius:50%;border:2px solid var(--gold);display:grid;place-items:center;font-weight:700;font-size:11px;color:var(--gold)}
+.mark.holding .ring{background:var(--gold);color:var(--brand)}
+.mark-btn{background:transparent;border:0;padding:6px 0;cursor:default}
+.mark-btn.holding{color:var(--gold)}
+.w-foot{justify-content:flex-end}
+.tiny{background:rgba(58,13,57,.55);border:1px solid var(--line);border-radius:999px;padding:8px 14px;font-size:14px;color:var(--soft)}
+
+/* text field */
+.field{display:flex;align-items:center;gap:12px;background:rgba(58,13,57,.82);border:2px solid var(--line);border-radius:var(--r-md);padding:0 22px;min-height:clamp(78px,6.5vh,120px)}
+.field.active{border-color:var(--gold);box-shadow:0 0 0 5px rgba(252,175,23,.18)}
+.field input{flex:1;min-width:0;background:transparent;border:0;outline:0;color:var(--ink);font-family:inherit;font-size:clamp(28px,4.4vw,52px);font-weight:600;caret-color:var(--gold)}
+.field input::placeholder{color:var(--soft);font-weight:400}
+.field .clear{border:0;background:var(--card);border-radius:50%;width:52px;height:52px;font-size:26px;color:var(--cream);flex:none}
+
+/* countries */
+.subhead{font-size:clamp(14px,1.8vw,19px);font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--soft)}
+.chips{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;align-content:start;overflow:auto;padding:2px;min-height:0;flex:1}
+.chip{min-height:clamp(70px,5.6vh,104px);border-radius:var(--r-md);border:2px solid transparent;background:rgba(106,42,105,.92);display:flex;align-items:center;gap:14px;padding:10px 18px;text-align:start;font-size:clamp(18px,2.8vw,30px);font-weight:600}
+.chip .cc{font-size:clamp(12px,1.5vw,16px);font-weight:700;letter-spacing:.08em;color:var(--brand);background:var(--cream);border-radius:6px;padding:3px 7px;flex:none}
+.chip .nm{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chip.sel{border-color:var(--gold);background:var(--card-2)}
+.chip:active{transform:scale(.98)}
+.empty-note{color:var(--muted);font-size:22px;padding:12px 4px;grid-column:1/-1}
+
+/* actions */
+.actions{display:flex;gap:14px;align-items:center;justify-content:flex-end;flex-wrap:wrap}
+.primary{min-height:clamp(76px,6.4vh,116px);min-width:min(320px,100%);border:0;border-radius:999px;background:var(--gold);color:#3a0d39;font-size:clamp(24px,3.4vw,40px);font-weight:700;padding:0 44px;box-shadow:0 14px 34px rgba(20,0,20,.38);transition:transform .12s,opacity .2s}
+.primary:active{transform:scale(.97)}
+.primary:disabled{opacity:.35;box-shadow:none}
+.second{min-height:clamp(70px,5.6vh,100px);border:2px solid var(--cream);border-radius:999px;background:transparent;color:var(--cream);font-size:clamp(20px,2.8vw,32px);font-weight:600;padding:0 40px}
+
+/* on-screen keyboard */
+.kb{display:flex;flex-direction:column;gap:clamp(6px,.7vh,12px);background:rgba(30,6,30,.78);border-radius:var(--r-lg);padding:clamp(10px,1.2vh,18px);margin-top:auto;backdrop-filter:blur(6px)}
+.kb[hidden]{display:none!important}
+.kr{display:flex;gap:clamp(5px,.8vw,9px);justify-content:center}
+.k{flex:1 1 0;min-width:0;max-width:96px;height:clamp(56px,5.2vh,96px);border:0;border-radius:14px;background:var(--card-2);color:var(--ink);font-size:clamp(20px,3.2vw,36px);font-weight:600;display:grid;place-items:center;padding:0}
+.k:active{background:var(--gold);color:#3a0d39}
+.k.fn{background:var(--card);font-size:clamp(15px,2.2vw,24px);color:var(--cream)}
+.k.on{background:var(--cream);color:var(--brand)}
+.k.wide{flex:2.2 1 0;max-width:220px}
+.k.space{flex:5 1 0;max-width:520px}
+
+/* thank you */
+.done{align-items:center;justify-content:center;text-align:center;gap:clamp(18px,2.6vh,44px)}
+.check{width:clamp(110px,12vw,170px);height:clamp(110px,12vw,170px);border-radius:50%;background:var(--good);display:grid;place-items:center;animation:pop .45s cubic-bezier(.2,1.4,.4,1);color:#14352d}
+.check svg{width:56%;height:56%}
+@keyframes pop{from{transform:scale(.4);opacity:0}to{transform:scale(1);opacity:1}}
+.d-name{font-weight:700;font-size:clamp(40px,7.6vw,92px);line-height:1.12;color:var(--gold)}
+.d-line{font-size:clamp(20px,3vw,36px);color:var(--cream)}
+.badge{display:inline-flex;align-items:baseline;gap:14px;background:rgba(106,42,105,.92);border-radius:999px;padding:14px 34px;font-size:clamp(18px,2.4vw,28px);color:var(--muted)}
+.badge b{font-size:clamp(34px,4.6vw,56px);color:var(--ink)}
+.count{color:var(--soft);font-size:clamp(16px,2vw,22px)}
+
+/* overlay + status */
+.overlay{position:fixed;inset:0;background:rgba(25,4,25,.8);display:grid;place-items:center;z-index:20;padding:16px}
+.ov-card{background:var(--brand);border:1px solid var(--line);border-radius:var(--r-lg);padding:40px 48px;text-align:center;display:flex;flex-direction:column;gap:20px;align-items:center;max-width:640px}
+.ov-card h2{font-size:clamp(30px,4vw,46px)}
+.ov-card p{font-size:clamp(18px,2.4vw,26px);color:var(--muted)}
+.status{position:fixed;inset-inline-end:max(16px, env(safe-area-inset-right, 0px));bottom:calc(14px + env(safe-area-inset-bottom, 0px));z-index:15;background:var(--bg-2);border:1px solid var(--line);color:var(--muted);border-radius:999px;padding:8px 16px;font-size:14px;display:flex;align-items:center;gap:8px}
+.status i{width:9px;height:9px;border-radius:50%;background:var(--gold)}
+
+/* ---------- landscape 1920 x 1080 (the pavilion screen); portrait and phones keep the stacked layout above ---------- */
+@media (min-aspect-ratio: 5/4) {
+  body{background-image:radial-gradient(58% 80% at 30% 45%, #6b2d6a 0%, #4b154a 55%, #2f0a2f 100%)}
+  .o1{width:34vh;top:-12vh;right:-7vh}
+  .o2{width:31vh;top:auto;bottom:-16vh;left:-3vh}
+  .o3{width:36vh;bottom:-13vh;right:-6vh}
+  .o4{width:28vh;bottom:auto;top:-14vh;left:-4vh}
+  #kiosk{max-width:1760px;padding-block:clamp(16px,3vh,40px);padding-inline:clamp(0px,3.6vw,70px)}
+  .kbar{min-height:clamp(52px,6vh,72px)}
+  .ghost{font-size:clamp(16px,2.2vh,24px);min-height:clamp(48px,5.6vh,64px)}
+  .screen{gap:clamp(12px,2vh,28px);padding-top:clamp(10px,2vh,28px)}
+  .q{font-size:clamp(30px,5.6vh,64px)}
+  .hint{font-size:clamp(15px,2.2vh,24px)}
+  /* welcome: a fixed 1920 x 1080 stage (the designer's layout) scaled to fit the screen, so nothing can overlap */
+  :root{--u:min(calc((100vw - 32px) / 1920), calc(100vh / 1080))}
+  .screen.welcome{position:fixed;left:50%;top:50%;width:calc(1920 * var(--u));height:calc(1080 * var(--u));transform:translate(-50%,-50%);
+    display:block;padding:0;text-align:start}
+  .welcome > *{position:absolute;margin:0}
+  .welcome .eyebrow{left:calc(155 * var(--u));top:calc(186 * var(--u));font-weight:400;font-size:calc(19 * var(--u));letter-spacing:.02em;text-transform:none;color:var(--soft);padding:0}
+  .wtop{left:calc(155 * var(--u));top:calc(392 * var(--u));width:calc(870 * var(--u));display:flex;flex-direction:column;align-items:flex-start;gap:calc(6 * var(--u))}
+  .w-en{font-size:calc(96 * var(--u));line-height:calc(92 * var(--u))}
+  .w-en span{display:block;white-space:nowrap}
+  .w-ar{font-size:calc(70 * var(--u));line-height:calc(104 * var(--u));white-space:nowrap}
+  .langs{left:calc(1058 * var(--u));top:calc(279 * var(--u));width:calc(706 * var(--u));display:flex;flex-direction:column;gap:calc(28 * var(--u))}
+  .lang{min-height:0;height:calc(245 * var(--u));border-radius:calc(28 * var(--u));box-shadow:none;padding:0 calc(46 * var(--u));gap:calc(36 * var(--u))}
+  .lang .shape{width:calc(182 * var(--u))}
+  .lang .txt{gap:calc(6 * var(--u))}
+  .lang b{font-size:calc(66 * var(--u));line-height:1.05}
+  .lang span{font-size:calc(28 * var(--u));font-weight:600;opacity:1}
+  .lang .go{width:calc(80 * var(--u));height:calc(80 * var(--u))}
+  .pulse{left:calc(155 * var(--u));top:calc(848 * var(--u));font-size:calc(24 * var(--u));gap:calc(12 * var(--u))}
+  .pulse i{width:calc(12 * var(--u));height:calc(12 * var(--u))}
+  .w-foot{right:calc(82 * var(--u));bottom:calc(34 * var(--u));width:auto}
+  .tiny{font-size:calc(15 * var(--u));padding:calc(8 * var(--u)) calc(14 * var(--u))}
+  /* name: question on top, field + Next side by side, keyboard below */
+  .s-name{display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-rows:auto auto auto 1fr;
+    grid-template-areas:"q q" "field act" "hint hint" "kb kb";column-gap:20px;align-items:center}
+  .s-name .q{grid-area:q} .s-name .field{grid-area:field} .s-name .hint{grid-area:hint}
+  .s-name .actions{grid-area:act} .s-name .kb{grid-area:kb;align-self:end;width:min(100%,1560px);justify-self:center}
+  /* country: question, search and Register on the left; countries on the right; keyboard across the bottom */
+  .s-country{display:grid;grid-template-columns:minmax(0,.8fr) minmax(0,1.45fr);grid-template-rows:auto auto 1fr auto auto;
+    grid-template-areas:"q label" "field list" ". list" "act list" "kb kb";column-gap:clamp(20px,3vw,48px);row-gap:clamp(10px,1.8vh,22px)}
+  .s-country .q{grid-area:q;align-self:end} .s-country .field{grid-area:field;align-self:start}
+  .s-country .subhead{grid-area:label;align-self:end}
+  .s-country .chips{grid-area:list;grid-template-columns:repeat(3,minmax(0,1fr))}
+  .s-country .actions{grid-area:act;justify-content:flex-start}
+  .s-country .kb{grid-area:kb;width:min(100%,1500px);justify-self:center}
+  .chip{min-height:clamp(60px,8.4vh,96px);font-size:clamp(17px,2.7vh,28px)}
+  .chip .cc{font-size:clamp(11px,1.5vh,16px)}
+  .field{min-height:clamp(70px,9.5vh,110px)}
+  .field input{font-size:clamp(26px,4.6vh,50px)}
+  .primary{min-height:clamp(68px,9vh,104px);font-size:clamp(22px,3.6vh,38px)}
+  .second{min-height:clamp(62px,8vh,92px);font-size:clamp(19px,3vh,30px)}
+  .k{height:clamp(52px,8.6vh,96px);max-width:118px;font-size:clamp(20px,3.6vh,36px)}
+  .k.fn{font-size:clamp(14px,2.3vh,24px)}
+  .k.wide{max-width:240px} .k.space{max-width:600px}
+  /* thank you */
+  .d-name{font-size:clamp(40px,9vh,100px)}
+  .d-line{font-size:clamp(18px,3.4vh,36px)}
+  .check{width:clamp(96px,15vh,160px);height:clamp(96px,15vh,160px)}
+  .badge{font-size:clamp(17px,2.6vh,28px)} .badge b{font-size:clamp(30px,5vh,56px)}
+}
+
+/* ================= DASHBOARD ================= */
+#dash{position:relative;z-index:1;max-width:1200px;margin:0 auto;padding-block:28px 48px;display:flex;flex-direction:column;gap:22px}
+.dh{display:flex;flex-wrap:wrap;gap:14px;align-items:flex-end;justify-content:space-between}
+.dh h1{font-size:clamp(28px,3.4vw,42px);color:var(--gold)}
+.dh .sub{color:var(--muted);font-size:15px;margin-top:4px}
+.btns{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.btn{border:1.5px solid var(--line);background:var(--bg-2);border-radius:999px;padding:10px 18px;font-size:15px;font-weight:600;color:var(--cream);min-height:44px;display:inline-flex;align-items:center;text-decoration:none}
+.btn.gold{background:var(--gold);color:#3a0d39;border-color:var(--gold)}
+.btn:disabled{opacity:.45}
+.note{background:var(--bg-2);border:1px solid var(--line);border-radius:var(--r-md);padding:12px 16px;color:var(--muted);font-size:15px}
+.note.warn{border-color:var(--gold);color:var(--cream)}
+.kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+@media (max-width:900px){.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.kpi{background:var(--card);border-radius:var(--r-md);padding:16px 18px;display:flex;flex-direction:column;gap:4px;min-width:0}
+.kpi span{font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:var(--soft);font-weight:600}
+.kpi b{font-size:clamp(30px,3.4vw,44px);line-height:1.1;color:var(--ink)}
+.kpi small{color:var(--muted);font-size:14px}
+.seg{display:inline-flex;background:var(--bg-2);border:1px solid var(--line);border-radius:999px;padding:4px;gap:4px}
+.seg button{border:0;background:transparent;border-radius:999px;padding:8px 16px;font-size:14px;font-weight:600;color:var(--muted);min-height:38px}
+.seg button[aria-pressed="true"]{background:var(--cream);color:var(--brand)}
+.grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+@media (max-width:900px){.grid2{grid-template-columns:minmax(0,1fr)}}
+.panel{background:var(--bg-2);border:1px solid var(--line);border-radius:var(--r-md);padding:18px;min-width:0;display:flex;flex-direction:column;gap:12px}
+.panel h3{font-size:18px;color:var(--cream)}
+.panel .cap{font-size:13px;color:var(--soft)}
+.vbars{display:flex;align-items:flex-end;gap:2px;height:190px;border-bottom:1px solid var(--line);padding-top:22px}
+.vb{flex:1 1 0;min-width:0;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;height:100%;position:relative}
+.vb i{display:block;width:min(70%,46px);background:var(--gold);border-radius:4px 4px 0 0}
+.vb em{position:absolute;font-style:normal;font-size:12px;color:var(--cream);font-variant-numeric:tabular-nums}
+.vaxis{display:flex;gap:2px}
+.vaxis span{flex:1 1 0;min-width:0;text-align:center;font-size:12px;color:var(--soft);font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden}
+.hbars{display:flex;flex-direction:column;gap:8px}
+.hb{display:grid;grid-template-columns:minmax(90px,34%) minmax(0,1fr) 52px;gap:10px;align-items:center;font-size:14px}
+.hb .l{color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hb .t{height:14px;background:rgba(255,226,179,.08);border-radius:4px;overflow:hidden}
+.hb .t i{display:block;height:100%;background:var(--gold);border-radius:0 4px 4px 0}
+.hb .v{text-align:end;color:var(--cream);font-variant-numeric:tabular-nums}
+.tbl-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th{text-align:start;font-weight:600;font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--soft);padding:8px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:9px 10px;border-bottom:1px solid rgba(133,75,118,.45);color:var(--ink);white-space:nowrap;font-variant-numeric:tabular-nums}
+.blank{color:var(--muted);font-size:15px;padding:24px 4px;text-align:center}
+.tip{position:fixed;z-index:30;pointer-events:none;background:var(--ink);color:#3a0d39;border-radius:8px;padding:6px 10px;font-size:13px;font-weight:600;transform:translate(-50%,-115%);white-space:nowrap}
+</style>
+
+<div class="orbit" aria-hidden="true">
+  <img class="sp o1" src="shapes/sun.webp" alt="">
+  <img class="sp rev o2" src="shapes/rose.webp" alt="">
+  <img class="sp o3" src="shapes/mangrove.webp" alt="">
+  <img class="sp rev o4" src="shapes/coral.webp" alt="">
+</div>
+<div id="kiosk" hidden></div>
+<div id="dash" hidden></div>
+<div id="status" class="status" hidden><i></i><span></span></div>
+<div id="tip" class="tip" hidden></div>
+
+<script>
+(() => {
+"use strict";
+/* ------------------------------------------------------------------ text */
+const T = {
+  en: { back: "Back", restart: "Start over", next: "Next", register: "Register",
+        qName: "What's your name?", phName: "Full name", hName: "Type your name with the keyboard below.",
+        qCountry: "Where are you from?", phCountry: "Search country", popular: "Popular", results: "Countries", noMatch: "No country matches that search.",
+        hello: n => `Welcome, ${n}!`, enjoy: "Enjoy your journey through the Oman Pavilion.", visitor: "You are visitor no.",
+        backIn: s => `Back to the start in ${s} s`, finish: "Done", still: "Are you still there?", stillP: "This registration will start over in a few seconds.", cont: "Continue" },
+  ar: { back: "رجوع", restart: "البدء من جديد", next: "التالي", register: "تسجيل",
+        qName: "ما اسمك؟", phName: "الاسم الكامل", hName: "اكتب اسمك باستخدام لوحة المفاتيح أدناه.",
+        qCountry: "من أي بلد أنت؟", phCountry: "ابحث عن الدولة", popular: "الأكثر اختياراً", results: "الدول", noMatch: "لا توجد دولة مطابقة للبحث.",
+        hello: n => `أهلاً وسهلاً، ${n}!`, enjoy: "نتمنى لك جولة ممتعة في جناح سلطنة عُمان.", visitor: "أنت الزائر رقم",
+        backIn: s => `العودة إلى البداية خلال ${s} ثانية`, finish: "تم", still: "هل ما زلت هنا؟", stillP: "سيبدأ التسجيل من جديد خلال ثوانٍ.", cont: "متابعة" }
+};
+const POPULAR = ["OM", "TR", "AU", "SA", "AE", "QA", "KW", "BH", "EG", "IN", "GB", "US"];
+const CODES = ("AF AX AL DZ AS AD AO AI AQ AG AR AM AW AU AT AZ BS BH BD BB BY BE BZ BJ BM BT BO BQ BA BW BR IO BN BG BF BI CV KH CM CA KY CF TD CL CN CX CC CO KM CG CD CK CR CI HR CU CW CY CZ DK DJ DM DO EC EG SV GQ ER EE SZ ET FK FO FJ FI FR GF PF GA GM GE DE GH GI GR GL GD GP GU GT GG GN GW GY HT VA HN HK HU IS IN ID IR IQ IE IM IL IT JM JP JE JO KZ KE KI KP KR KW KG LA LV LB LS LR LY LI LT LU MO MG MW MY MV ML MT MH MQ MR MU YT MX FM MD MC MN ME MS MA MZ MM NA NR NP NL NC NZ NI NE NG NU NF MK MP NO OM PK PW PS PA PG PY PE PH PN PL PT PR QA RE RO RU RW BL SH KN LC MF PM VC WS SM ST SA SN RS SC SL SG SX SK SI SB SO ZA GS SS ES LK SD SR SJ SE CH SY TW TJ TZ TH TL TG TK TO TT TN TR TM TC TV UG UA AE GB US UM UY UZ VU VE VN VG VI WF EH YE ZM ZW").split(" ");
+let DN_EN = null, DN_AR = null;
+try { DN_EN = new Intl.DisplayNames(["en"], { type: "region" }); DN_AR = new Intl.DisplayNames(["ar"], { type: "region" }); } catch (e) {}
+const cname = (code, lang) => { try { const dn = lang === "ar" ? DN_AR : DN_EN; return (dn && dn.of(code)) || code; } catch (e) { return code; } };
+const COUNTRIES = CODES.map(c => ({ c, en: cname(c, "en"), ar: cname(c, "ar") })).sort((a, b) => a.en.localeCompare(b.en));
+const norm = s => (s || "").toLowerCase().normalize("NFD").replace(/[̀-ًͯ-ْ]/g, "").replace(/[أإآ]/g, "ا").replace(/ة/g, "ه").replace(/ى/g, "ي");
+const KB = {
+  en: [["1","2","3","4","5","6","7","8","9","0"], ["q","w","e","r","t","y","u","i","o","p"], ["a","s","d","f","g","h","j","k","l","'"],
+       ["{shift}","z","x","c","v","b","n","m","-","{bksp}"], ["{lang}","{space}","."]],
+  ar: [["ض","ص","ث","ق","ف","غ","ع","ه","خ","ح","ج"], ["ش","س","ي","ب","ل","ا","ت","ن","م","ك","ط"],
+       ["ذ","ء","ؤ","ر","ى","ة","و","ز","ظ","د","{bksp}"], ["{lang}","ئ","أ","{space}","إ","آ"]]
+};
+const ARROW = '<path d="M5 12h14M13 6l6 6-6 6"/>';
+
+/* ------------------------------------------------------------------ helpers */
+const $ = s => document.querySelector(s);
+const el = (tag, attrs = {}, ...kids) => {
+  const n = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (v == null || v === false) continue;
+    if (k === "class") n.className = v; else if (k === "text") n.textContent = v;
+    else if (k.startsWith("on")) n.addEventListener(k.slice(2), v); else n.setAttribute(k, v === true ? "" : v);
+  }
+  for (const k of kids.flat()) if (k != null) n.append(k.nodeType ? k : document.createTextNode(k));
+  return n;
+};
+const svgIcon = inner => { const s = document.createElementNS("http://www.w3.org/2000/svg", "svg"); s.setAttribute("viewBox", "0 0 24 24"); s.setAttribute("fill", "none"); s.setAttribute("stroke", "currentColor"); s.setAttribute("stroke-width", "2"); s.setAttribute("stroke-linecap", "round"); s.setAttribute("stroke-linejoin", "round"); s.innerHTML = inner; return s; };
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const pad = n => String(n).padStart(2, "0");
+const dayKey = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const fmt = n => (n || 0).toLocaleString("en-US");
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+};
+const KIOSK_ID = store.get("opr-kiosk-id", null) || (() => { const id = "kiosk-" + Math.random().toString(36).slice(2, 10); store.set("opr-kiosk-id", id); return id; })();
+
+/* ------------------------------------------------------------------ local data (Windows app, no cloud)
+   Every registration is written straight to disk by the app:
+   Documents\\Oman Pavilion Registration\\visitors.csv (+ visitors.jsonl and one CSV per day in "Daily").  */
+const API = window.kioskAPI || null;
+function updateStatus() {}
+async function submit(rec) {
+  if (!API) { const q = store.get("opr-local", []); q.push(rec); store.set("opr-local", q); return q.length; }
+  try { const r = await API.register(rec); return r && r.number; } catch (e) { console.error(e); return null; }
+}
+
+/* ------------------------------------------------------------------ routing */
+const route = () => location.hash === "#dashboard" ? "dashboard" : "kiosk";
+function show() {
+  const r = route();
+  $("#kiosk").hidden = r !== "kiosk"; $("#dash").hidden = r !== "dashboard";
+  document.body.classList.toggle("dash", r === "dashboard");
+  if (r === "kiosk") Kiosk.reset(); else Dash.open();
+  updateStatus();
+}
+window.addEventListener("hashchange", show);
+
+/* ================================================================== KIOSK */
+const Kiosk = (() => {
+  const root = $("#kiosk");
+  let S = null, idleT = null, warnT = null, doneT = null, doneTick = null, activeInput = null, shift = false, kbLang = "en", holdT = null;
+  const fresh = () => ({ screen: "welcome", lang: "en", name: "", country: "", search: "", number: null });
+  const L = () => T[S.lang];
+  const STEPS = ["name", "country"];
+
+  function reset() { clearTimeout(doneT); clearInterval(doneTick); const o = $("#idle"); if (o) o.remove(); S = fresh(); render(); }
+  function go(screen) { S.screen = screen; activeInput = null; render(); }
+
+  function armIdle() {
+    clearTimeout(idleT); clearTimeout(warnT); const ov = $("#idle"); if (ov) ov.remove();
+    if (route() !== "kiosk" || !S || S.screen === "welcome" || S.screen === "done") return;
+    idleT = setTimeout(() => {
+      const L0 = L();
+      document.body.append(el("div", { class: "overlay", id: "idle" }, el("div", { class: "ov-card", dir: S.lang === "ar" ? "rtl" : "ltr" },
+        el("h2", { text: L0.still }), el("p", { text: L0.stillP }), el("button", { class: "primary", type: "button", text: L0.cont, onclick: () => armIdle() }))));
+      warnT = setTimeout(reset, 12000);
+    }, 45000);
+  }
+  ["pointerdown", "keydown"].forEach(ev => document.addEventListener(ev, () => { if (!$("#idle")) armIdle(); }, { passive: true }));
+
+  /* on-screen keyboard */
+  function keyboard() {
+    const box = el("div", { class: "kb", dir: kbLang === "ar" ? "rtl" : "ltr", "aria-label": "On-screen keyboard" });
+    KB[kbLang].forEach(r => {
+      const row = el("div", { class: "kr" });
+      r.forEach(k => {
+        let label = k, cls = "k", act = () => type(k);
+        if (k === "{shift}") { label = "⇧"; cls += " fn" + (shift ? " on" : ""); act = () => { shift = !shift; rerenderKb(); }; }
+        else if (k === "{bksp}") { label = "⌫"; cls += " fn"; act = () => edit(v => v.slice(0, -1)); }
+        else if (k === "{space}") { label = kbLang === "ar" ? "مسافة" : "space"; cls += " space fn"; act = () => edit(v => (v && !v.endsWith(" ")) ? v + " " : v); }
+        else if (k === "{lang}") { label = kbLang === "ar" ? "English" : "عربي"; cls += " wide fn"; act = () => { kbLang = kbLang === "ar" ? "en" : "ar"; shift = false; rerenderKb(); }; }
+        else if (shift && kbLang === "en") label = k.toUpperCase();
+        row.append(el("button", { class: cls, type: "button", text: label, onpointerdown: e => { e.preventDefault(); act(); } }));
+      });
+      box.append(row);
+    });
+    return box;
+  }
+  function rerenderKb() { const old = root.querySelector(".kb"); if (old) { const n = keyboard(); n.hidden = old.hidden; old.replaceWith(n); } }
+  function edit(fn) {
+    if (!activeInput) return;
+    activeInput.value = fn(activeInput.value).slice(0, Number(activeInput.getAttribute("maxlength")) || 60);
+    activeInput.dispatchEvent(new Event("input"));
+  }
+  function type(ch) {
+    if (!activeInput) return;
+    const isName = activeInput.dataset.f === "name";
+    edit(v => {
+      let c = ch;
+      if (kbLang === "en" && /[a-z]/.test(c) && (shift || (isName && (v === "" || / $|-$/.test(v))))) c = c.toUpperCase();
+      return v + c;
+    });
+    if (shift) { shift = false; rerenderKb(); }
+  }
+  function field(f, placeholder, onInput) {
+    const input = el("input", { id: "f-" + f, "data-f": f, value: S[f], placeholder, inputmode: "none", autocomplete: "off", autocorrect: "off",
+      autocapitalize: "off", spellcheck: "false", maxlength: 60, dir: "auto", oninput: e => { S[f] = e.target.value; onInput && onInput(); } });
+    const box = el("div", { class: "field" }, input,
+      el("button", { class: "clear", type: "button", "aria-label": "Clear", text: "×", onclick: () => { input.value = ""; input.dispatchEvent(new Event("input")); focusField(input); } }));
+    input.addEventListener("focus", () => focusField(input));
+    return box;
+  }
+  function focusField(input) {
+    activeInput = input;
+    root.querySelectorAll(".field").forEach(b => b.classList.toggle("active", b.contains(input)));
+    const kb = root.querySelector(".kb"); if (kb) kb.hidden = false;
+    document.body.classList.add("busy");
+  }
+
+  function topBar() {
+    const L0 = L(), idx = STEPS.indexOf(S.screen);
+    return el("div", { class: "kbar" },
+      el("button", { class: "ghost", type: "button", text: (S.lang === "ar" ? "›  " : "‹  ") + L0.back, onclick: () => go(idx > 0 ? STEPS[idx - 1] : "welcome") }),
+      el("div", { class: "spacer" }),
+      el("div", { class: "dots", "aria-label": `Step ${idx + 1} of ${STEPS.length}` }, STEPS.map((s, i) => el("i", { class: i === idx ? "on" : i < idx ? "done" : "" }))),
+      el("div", { class: "spacer" }),
+      el("button", { class: "ghost", type: "button", text: L0.restart, onclick: reset }));
+  }
+
+  function welcome() {
+    const startIn = lang => { S.lang = lang; kbLang = lang; go("name"); };
+    const langBtn = (lang, label, sub, shape, d) => el("button", { class: "lang", type: "button", dir: lang === "ar" ? "rtl" : "ltr", lang, onclick: () => startIn(lang) },
+      el("img", { class: "shape", src: `shapes/${shape}.webp`, alt: "", style: `--d:${d}s` }),
+      el("span", { class: "txt" }, el("b", { text: label }), el("span", { text: sub })),
+      el("span", { class: "go", "aria-hidden": "true" }, svgIcon(ARROW)));
+    const mark = el("button", { class: "eyebrow mark-btn", type: "button", "aria-label": "COP31 Oman Pavilion. Staff: hold for 2 seconds to open the dashboard", text: "COP31 · OMAN PAVILION" });
+    const stopHold = () => { mark.classList.remove("holding"); clearTimeout(holdT); };
+    mark.addEventListener("pointerdown", () => { mark.classList.add("holding"); holdT = setTimeout(() => { location.hash = "#dashboard"; }, 2000); });
+    ["pointerup", "pointerleave", "pointercancel"].forEach(e => mark.addEventListener(e, stopHold));
+    const fs = el("button", { class: "tiny", type: "button", text: "Full screen", onclick: () => {
+      try { if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen().catch(() => {}); } catch (e) {} } });
+    return el("section", { class: "screen welcome" },
+      mark,
+      el("div", { class: "wtop" },
+        el("h1", { class: "w-en" }, el("span", { text: "Welcome to the" }), " ", el("span", { text: "Oman Pavilion" })),
+        el("p", { class: "w-ar", dir: "rtl", lang: "ar", text: "أهلاً بكم في جناح سلطنة عُمان" })),
+      el("div", { class: "langs" },
+        langBtn("en", "English", "Register your visit", "sun", 22),
+        langBtn("ar", "العربية", "سجّـــل زيارتـــك", "star", 26)),
+      el("p", { class: "pulse" }, el("i"), "Touch a language to begin · المس اللغة للبدء"),
+      el("div", { class: "w-foot" }, fs));
+  }
+  function nameScreen() {
+    const L0 = L();
+    const ok = () => S.name.trim().length >= 2;
+    const next = el("button", { class: "primary", type: "button", text: L0.next, disabled: !ok(), onclick: () => { S.name = S.name.trim().replace(/\s+/g, " "); go("country"); } });
+    const f = field("name", L0.phName, () => { next.disabled = !ok(); });
+    const sec = el("section", { class: "screen s-name" }, el("h2", { class: "q", text: L0.qName }), f, el("p", { class: "hint", text: L0.hName }),
+      el("div", { class: "actions" }, next), keyboard());
+    queueMicrotask(() => focusField(f.querySelector("input")));
+    return sec;
+  }
+  function countryScreen() {
+    const L0 = L();
+    const reg = el("button", { class: "primary", type: "button", text: L0.register, disabled: !S.country, onclick: finish });
+    const list = el("div", { class: "chips", role: "listbox", "aria-label": L0.results });
+    const label = el("p", { class: "subhead" });
+    const kb = keyboard(); kb.hidden = true;
+    const pick = code => { S.country = code; reg.disabled = false; list.querySelectorAll(".chip").forEach(x => { const on = x.dataset.c === code; x.classList.toggle("sel", on); x.setAttribute("aria-selected", on ? "true" : "false"); }); };
+    const chip = c => el("button", { class: "chip" + (S.country === c.c ? " sel" : ""), type: "button", role: "option", "aria-selected": S.country === c.c ? "true" : "false", "data-c": c.c, onclick: () => pick(c.c) },
+      el("span", { class: "cc", text: c.c }), el("span", { class: "nm", dir: "auto", text: S.lang === "ar" ? c.ar : c.en }));
+    const fill = () => {
+      list.replaceChildren();
+      const q = norm(S.search.trim());
+      let items;
+      if (!q) {
+        label.textContent = L0.popular;
+        items = POPULAR.map(c => COUNTRIES.find(x => x.c === c)).filter(Boolean);
+        if (S.country && !POPULAR.includes(S.country)) items.unshift(COUNTRIES.find(x => x.c === S.country));
+      } else {
+        label.textContent = L0.results;
+        const key = c => norm(S.lang === "ar" ? c.ar : c.en);
+        items = COUNTRIES.filter(c => norm(c.en).includes(q) || norm(c.ar).includes(q) || c.c.toLowerCase() === q)
+          .sort((a, b) => (key(a).startsWith(q) ? 0 : 1) - (key(b).startsWith(q) ? 0 : 1)).slice(0, 24);
+      }
+      if (!items.length) list.append(el("p", { class: "empty-note", text: L0.noMatch }));
+      items.forEach(c => list.append(chip(c)));
+    };
+    const f = field("search", L0.phCountry, fill);
+    fill();
+    async function finish() {
+      reg.disabled = true;
+      const now = new Date();
+      const rec = { name: S.name.trim(), country: S.country, lang: S.lang, ts: now.toISOString(), day: dayKey(now), hour: now.getHours() };
+      go("done");
+      const n = await submit(rec);
+      if (n) S.number = n;
+    }
+    return el("section", { class: "screen s-country" }, el("h2", { class: "q", text: L0.qCountry }), f, label, list, el("div", { class: "actions" }, reg), kb);
+  }
+  const badge = () => S.number ? el("p", { class: "badge badge-slot" }, el("span", { text: L().visitor }), el("b", { class: "tab", text: fmt(S.number) })) : el("span", { class: "badge-slot" });
+  function doneScreen() {
+    const L0 = L(); let left = 10;
+    const cnt = el("p", { class: "count", text: L0.backIn(left) });
+    clearTimeout(doneT); clearInterval(doneTick);
+    doneTick = setInterval(() => { left--; cnt.textContent = L0.backIn(Math.max(left, 0)); }, 1000);
+    doneT = setTimeout(reset, 10000);
+    const first = S.name.split(" ")[0] || S.name;
+    return el("section", { class: "screen done" },
+      el("div", { class: "check", "aria-hidden": "true" }, svgIcon('<path d="M5 12.5l4.5 4.5L19 7.5"/>')),
+      el("h2", { class: "d-name", dir: "auto", text: L0.hello(first) }),
+      el("p", { class: "d-line", text: L0.enjoy }),
+      el("button", { class: "second", type: "button", text: L0.finish, onclick: reset }), cnt);
+  }
+
+  function render() {
+    if (!S) S = fresh();
+    document.body.classList.toggle("busy", STEPS.includes(S.screen));
+    document.body.classList.toggle("calm", S.screen === "done");
+    root.replaceChildren();
+    const rtl = S.screen !== "welcome" && S.lang === "ar";
+    root.setAttribute("dir", rtl ? "rtl" : "ltr"); root.setAttribute("lang", rtl ? "ar" : "en");
+    if (STEPS.includes(S.screen)) root.append(topBar());
+    root.append(({ welcome, name: nameScreen, country: countryScreen, done: doneScreen })[S.screen]());
+    armIdle();
+  }
+  return { reset, render };
+})();
+
+/* ================================================================== DASHBOARD */
+const Dash = (() => {
+  const root = $("#dash");
+  let recs = [], scope = "today", info = { dir: "", startup: false }, msg = "";
+  async function load() {
+    try { recs = API ? await API.list() : store.get("opr-local", []); } catch (e) { recs = []; }
+    try { if (API) info = await API.info(); } catch (e) {}
+    render();
+  }
+  function open() { render(); load(); }
+  const tip = $("#tip");
+  function withTip(node, text) {
+    node.addEventListener("pointerenter", () => { tip.textContent = text; tip.hidden = false; });
+    node.addEventListener("pointermove", e => { tip.style.left = e.clientX + "px"; tip.style.top = e.clientY + "px"; });
+    node.addEventListener("pointerleave", () => { tip.hidden = true; });
+    return node;
+  }
+  function vbars(items, title, caption) {
+    const max = Math.max(1, ...items.map(i => i.v));
+    const bars = el("div", { class: "vbars", role: "img", "aria-label": title });
+    const axis = el("div", { class: "vaxis", "aria-hidden": "true" });
+    items.forEach(it => {
+      const h = Math.round((it.v / max) * 100);
+      const col = withTip(el("div", { class: "vb" }, el("i", { style: `height:${h}%` })), `${it.full || it.l}: ${fmt(it.v)} visitors`);
+      if (it.v === max && it.v > 0) col.append(el("em", { style: `bottom:calc(${h}% + 4px)`, text: fmt(it.v) }));
+      bars.append(col); axis.append(el("span", { text: it.l }));
+    });
+    return el("div", { class: "panel" }, el("h3", { text: title }), el("p", { class: "cap", text: caption }), bars, axis);
+  }
+  function hbars(entries, title, caption, labelFn) {
+    const max = Math.max(1, ...entries.map(e => e[1]));
+    const box = el("div", { class: "hbars" });
+    if (!entries.length) box.append(el("p", { class: "blank", text: "No visitors in this period yet." }));
+    entries.forEach(([k, v]) => box.append(withTip(el("div", { class: "hb" }, el("span", { class: "l", text: labelFn(k) }),
+      el("span", { class: "t" }, el("i", { style: `width:${Math.max(2, (v / max) * 100)}%` })), el("span", { class: "v", text: fmt(v) })), `${labelFn(k)}: ${fmt(v)} visitors`)));
+    return el("div", { class: "panel" }, el("h3", { text: title }), el("p", { class: "cap", text: caption }), box);
+  }
+  const act = async (fn, okText) => { try { const r = await fn(); msg = r === false ? "" : (typeof r === "string" ? r : okText); } catch (e) { msg = "That didn't work: " + (e && e.message || e); } render(); };
+  let confirmExit = false;
+  function render() {
+    if (route() !== "dashboard") return;
+    root.replaceChildren();
+    const today = dayKey(new Date());
+    const days = [...new Set(recs.map(r => r.day))].sort();
+    const sel = scope === "today" ? recs.filter(r => r.day === today) : recs;
+    const todayRecs = recs.filter(r => r.day === today);
+    const byCountry = {}; sel.forEach(r => byCountry[r.country] = (byCountry[r.country] || 0) + 1);
+    const allCountries = new Set(recs.map(r => r.country));
+    const byHour = {}; todayRecs.forEach(r => { const h = pad(r.hour); byHour[h] = (byHour[h] || 0) + 1; });
+    const busiest = Object.entries(byHour).sort((a, b) => b[1] - a[1])[0];
+
+    root.append(el("div", { class: "dh" },
+      el("div", {}, el("h1", { text: "Oman Pavilion visitors" }), el("p", { class: "sub", text: "Saved on: " + (info.dir || "this kiosk") + " · COP31, 12 days" })),
+      el("div", { class: "btns" },
+        API ? el("button", { class: "btn gold", type: "button", text: "Download visitor list (CSV)", onclick: () => act(() => API.exportCsv(), "Saved.") }) : null,
+        API && API.openFolder ? el("button", { class: "btn", type: "button", text: "Open data folder", onclick: () => act(() => API.openFolder(), "") }) : null,
+        el("button", { class: "btn", type: "button", text: "Refresh", onclick: load }),
+        el("a", { class: "btn", href: "#kiosk" }, "Back to kiosk"))));
+    if (msg) root.append(el("p", { class: "note", text: msg }));
+    if (!API) root.append(el("p", { class: "note warn", text: "Opened outside the app: registrations are kept only in this browser. Run Oman Pavilion Registration.exe to save them to disk." }));
+
+    root.append(el("div", { class: "kpis" },
+      el("div", { class: "kpi" }, el("span", { text: "Visitors today" }), el("b", { class: "tab", text: fmt(todayRecs.length) }), el("small", { text: new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" }) })),
+      el("div", { class: "kpi" }, el("span", { text: "Visitors, all days" }), el("b", { class: "tab", text: fmt(recs.length) }), el("small", { text: `${days.length} of 12 event days so far` })),
+      el("div", { class: "kpi" }, el("span", { text: "Countries" }), el("b", { class: "tab", text: fmt(allCountries.size) }), el("small", { text: "represented so far" })),
+      el("div", { class: "kpi" }, el("span", { text: "Busiest hour today" }), el("b", { class: "tab", text: busiest ? `${busiest[0]}:00` : "—" }), el("small", { text: busiest ? `${fmt(busiest[1])} visitors` : "no visitors yet today" }))));
+    if (!recs.length) root.append(el("p", { class: "note", text: "No registrations yet. Go back to the kiosk and register the first visitor; numbers appear here." }));
+
+    const perDay = days.map((d, i) => { const dt = new Date(d + "T12:00:00"); return { l: `D${i + 1}`, full: dt.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" }), v: recs.filter(r => r.day === d).length }; });
+    while (perDay.length < 12) perDay.push({ l: `D${perDay.length + 1}`, full: `Day ${perDay.length + 1} (not started)`, v: 0 });
+    const hourItems = []; for (let h = 8; h <= 21; h++) hourItems.push({ l: pad(h), full: `${pad(h)}:00–${pad(h)}:59`, v: byHour[pad(h)] || 0 });
+    root.append(el("div", { class: "grid2" },
+      vbars(perDay, "Visitors per event day", "Days 1–12, counted from the first day with a registration"),
+      vbars(hourItems, "Today by hour", "Registrations each hour, 08:00–21:59")));
+
+    const segBtn = (k, txt) => el("button", { type: "button", "aria-pressed": scope === k ? "true" : "false", text: txt, onclick: () => { scope = k; render(); } });
+    const topC = Object.entries(byCountry).sort((a, b) => b[1] - a[1]);
+    const shown = topC.slice(0, 12); const other = topC.slice(12).reduce((s, e) => s + e[1], 0); if (other) shown.push(["__other", other]);
+    root.append(el("div", { class: "btns" }, el("div", { class: "seg", role: "group", "aria-label": "Period" }, segBtn("today", "Today"), segBtn("all", "All days"))));
+    const recent = recs.slice(-25).reverse();
+    const tb = el("tbody");
+    recent.forEach(r => { const d = new Date(r.ts); tb.append(el("tr", {},
+      el("td", { text: `${d.toLocaleDateString("en-GB", { day: "numeric", month: "short" })} ${pad(d.getHours())}:${pad(d.getMinutes())}` }),
+      el("td", { dir: "auto", text: r.name }), el("td", { text: cname(r.country, "en") }))); });
+    root.append(el("div", { class: "grid2" },
+      hbars(shown, "Where visitors come from", scope === "today" ? "Today, top 12 countries" : "All days, top 12 countries", k => k === "__other" ? `Other (${topC.length - 12} countries)` : cname(k, "en")),
+      el("div", { class: "panel" }, el("h3", { text: "Latest registrations" }), el("p", { class: "cap", text: "The 25 most recent. Download the CSV for the full list." }),
+        recent.length ? el("div", { class: "tbl-wrap" }, el("table", {}, el("thead", {}, el("tr", {}, ["Time", "Name", "Country"].map(h => el("th", { text: h })))), tb))
+                      : el("p", { class: "blank", text: "Registrations will appear here." }))));
+
+    if (API && API.setStartup) {
+      root.append(el("div", { class: "panel" }, el("h3", { text: "This computer" }),
+        el("p", { class: "dash-path", text: "Data folder: " + (info.dir || "") }),
+        el("div", { class: "btns" },
+          el("button", { class: "btn", type: "button", text: info.startup ? "Start with Windows: ON" : "Start with Windows: OFF",
+            onclick: () => act(async () => { info.startup = await API.setStartup(!info.startup); return info.startup ? "The app will open by itself when Windows starts." : "The app will no longer open by itself."; }) }),
+          confirmExit
+            ? el("button", { class: "btn danger", type: "button", text: "Tap again to close the app", onclick: () => API.quit() })
+            : el("button", { class: "btn danger", type: "button", text: "Exit app", onclick: () => { confirmExit = true; render(); setTimeout(() => { confirmExit = false; render(); }, 4000); } }))));
+    }
+  }
+  return { open, render };
+})();
+
+show();
+})();
+</script>
+
+</body></html>

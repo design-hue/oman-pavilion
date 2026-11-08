@@ -46,7 +46,7 @@ main{position:fixed;inset:0;display:grid;place-items:center}
 .d2{left:calc(1560*var(--u));top:calc(330*var(--u));width:calc(170*var(--u));height:calc(170*var(--u))}
 .d2 img{animation-duration:50s;animation-direction:reverse}
 
-.cards{position:absolute;left:calc(120*var(--u));right:calc(120*var(--u));top:calc(560*var(--u));height:calc(400*var(--u));display:grid;grid-template-columns:repeat(3,1fr);gap:calc(40*var(--u))}
+.cards{position:absolute;left:calc(120*var(--u));right:calc(120*var(--u));top:calc(500*var(--u));height:calc(440*var(--u));display:grid;grid-template-columns:repeat(3,1fr);gap:calc(40*var(--u))}
 .card{position:relative;border-radius:calc(40*var(--u));background:linear-gradient(170deg,rgba(255,255,255,.15),rgba(255,255,255,.04) 55%);border:1px solid var(--line);
   display:flex;flex-direction:column;justify-content:flex-end;padding:calc(40*var(--u)) calc(40*var(--u)) calc(44*var(--u));text-align:start;
   box-shadow:0 calc(30*var(--u)) calc(60*var(--u)) rgba(10,0,10,.35);transition:transform .35s cubic-bezier(.2,.9,.3,1.2),background .3s;
@@ -87,25 +87,25 @@ body.attract .hint{font-size:calc(28*var(--u));color:var(--cream)}
   <div class="stage">
     <div class="deco d1" aria-hidden="true"><img src="get-to-know-oman/assets/sun.webp" alt=""></div>
     <p class="eyebrow"><b>COP31</b> · Oman Pavilion</p>
-    <div class="title"><h1>Welcome to the <em>Oman Pavilion</em></h1><p dir="rtl" lang="ar">أهلاً بكم في جناح سلطنة عُمان</p></div>
+    <div class="title"><h1>Welcome to the <em>Oman Pavilion</em></h1></div>
     <div class="cards">
       <button class="card" type="button" data-go="registration/" style="--i:0;--c:#fcaf17;--d:60s">
         <span class="shape"><img src="registration/shapes/star.webp" alt=""></span>
-        <span class="num">01</span><h2>Registration</h2><span class="ar" dir="rtl" lang="ar">التسجيل</span><span class="sub">Register your visit</span>
+        <span class="num">01</span><h2>Registration</h2><span class="sub">Register your visit</span>
         <span class="go"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span>
       </button>
       <button class="card" type="button" data-go="get-to-know-oman/" style="--i:1;--c:#6fc7aa;--d:80s">
         <span class="shape"><img src="get-to-know-oman/assets/mangrove.webp" alt=""></span>
-        <span class="num">02</span><h2>Get to Know Oman</h2><span class="ar" dir="rtl" lang="ar">تعرّف على عُمان</span><span class="sub">From Commitment to Implementation</span>
+        <span class="num">02</span><h2>Get to Know Oman</h2><span class="sub">From Commitment to Implementation</span>
         <span class="go"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span>
       </button>
       <button class="card" type="button" data-go="agenda/" style="--i:2;--c:#f49ab0;--d:70s">
         <span class="shape"><img src="get-to-know-oman/assets/rose.webp" alt=""></span>
-        <span class="num">03</span><h2>Agenda</h2><span class="ar" dir="rtl" lang="ar">جدول الفعاليات</span><span class="sub">Pavilion programme</span>
+        <span class="num">03</span><h2>Agenda</h2><span class="sub">Pavilion programme</span>
         <span class="go"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span>
       </button>
     </div>
-    <p class="hint"><span class="ring"></span><span>Touch to begin · المس للبدء</span></p>
+    <p class="hint"><span class="ring"></span><span>Touch to begin</span></p>
     <button class="fs" id="fsBtn" type="button" aria-label="Full screen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
   </div>
 </main>

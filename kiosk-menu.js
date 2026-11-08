@@ -9,7 +9,7 @@
   try { if (window.parent !== window && window.parent.KIOSK_HUB) hub = window.parent.KIOSK_HUB; } catch (e) {}
   window.KIOSK = {
     embedded: !!hub,
-    toMenu: function () { if (hub) hub.close(); else location.href = new URL("../", location.href).href; }
+    toMenu: function () { if (hub) hub.close(); else location.href = new URL("../index.html", location.href).href; }
   };
   if (!hub) return;
 

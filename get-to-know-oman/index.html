@@ -775,5 +775,7 @@ document.addEventListener("keydown", e => {
 buildHome(); armIdle();
 })();
 </script>
+<script>window.KIOSK_MENU = { pos: { left: 120, bottom: 12 }, show: () => !document.getElementById("home").hidden };</script>
+<script src="../kiosk-menu.js"></script>
 </body>
 </html>

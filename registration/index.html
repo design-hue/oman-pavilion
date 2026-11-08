@@ -549,7 +549,7 @@ const Kiosk = (() => {
     const cnt = el("p", { class: "count", text: L0.backIn(left) });
     clearTimeout(doneT); clearInterval(doneTick);
     doneTick = setInterval(() => { left--; cnt.textContent = L0.backIn(Math.max(left, 0)); }, 1000);
-    doneT = setTimeout(reset, 10000);
+    doneT = setTimeout(() => { if (window.KIOSK && KIOSK.embedded) KIOSK.toMenu(); else reset(); }, 10000);
     const first = S.name.split(" ")[0] || S.name;
     return el("section", { class: "screen done" },
       el("div", { class: "check", "aria-hidden": "true" }, svgIcon('<path d="M5 12.5l4.5 4.5L19 7.5"/>')),
@@ -562,6 +562,7 @@ const Kiosk = (() => {
     if (!S) S = fresh();
     document.body.classList.toggle("busy", STEPS.includes(S.screen));
     document.body.classList.toggle("calm", S.screen === "done");
+    document.body.dataset.screen = S.screen;
     root.replaceChildren();
     const rtl = S.screen !== "welcome" && S.lang === "ar";
     root.setAttribute("dir", rtl ? "rtl" : "ltr"); root.setAttribute("lang", rtl ? "ar" : "en");
@@ -680,4 +681,6 @@ show();
 })();
 </script>
 
+<script>window.KIOSK_MENU = { pos: { left: 830, bottom: 44 }, show: () => document.body.dataset.screen === "welcome" && location.hash !== "#dashboard" };</script>
+<script src="../kiosk-menu.js"></script>
 </body></html>

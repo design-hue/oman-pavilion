@@ -11,12 +11,39 @@
 const SHEET_URL = "";
 
 (() => {
+  /* Visitors are saved in TWO places in this kiosk's browser (localStorage + an IndexedDB backup copy),
+     every save is read back to check it worked, and the browser is asked to keep the data permanently.
+     If one copy is ever cleared, it is restored from the other when the page loads. */
   const KEY = "opr-visitors", QKEY = "opr-sheet-queue";
   const get = (k, d) => { try { return JSON.parse(localStorage.getItem(k) || d); } catch (e) { return JSON.parse(d); } };
-  const put = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} };
+  const put = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); return localStorage.getItem(k) === JSON.stringify(v); } catch (e) { return false; } };
   let dn = null; try { dn = new Intl.DisplayNames(["en"], { type: "region" }); } catch (e) {}
   const country = c => { try { return (dn && dn.of(c)) || c; } catch (e) { return c; } };
   const pad = n => String(n).padStart(2, "0");
+  // ---- IndexedDB backup copy ----
+  const idb = (() => {
+    let dbp = null;
+    const open = () => dbp || (dbp = new Promise((res, rej) => {
+      try { const r = indexedDB.open("oman-pavilion-registration", 1);
+        r.onupgradeneeded = () => r.result.createObjectStore("visitors", { keyPath: "id" });
+        r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); } catch (e) { rej(e); }
+    }));
+    const tx = (mode, fn) => open().then(db => new Promise((res, rej) => { const t = db.transaction("visitors", mode); const st = t.objectStore("visitors"); const out = fn(st); t.oncomplete = () => res(out && out.result !== undefined ? out.result : out); t.onerror = () => rej(t.error); }));
+    return { add: r => tx("readwrite", st => st.put(r)), all: () => tx("readonly", st => st.getAll()) };
+  })();
+  const rid = r => r.id || (r.ts + "|" + r.name + "|" + r.country);
+  let health = { ok: true, persisted: null, lastError: "" };
+  try { navigator.storage && navigator.storage.persist && navigator.storage.persist().then(p => health.persisted = p); } catch (e) {}
+  // restore: merge both copies so neither can lose visitors
+  const ready = (async () => {
+    try {
+      const a = get(KEY, "[]"), b = await idb.all();
+      const map = new Map(); a.concat(b).forEach(r => { r.id = rid(r); map.set(r.id, r); });
+      const merged = [...map.values()].sort((x, y) => x.ts < y.ts ? -1 : 1);
+      if (merged.length !== a.length) put(KEY, merged);
+      const have = new Set(b.map(r => r.id)); for (const r of merged) if (!have.has(r.id)) await idb.add(r);
+    } catch (e) { health.lastError = "Backup copy unavailable: " + (e && e.message || e); }
+  })();
   let sending = false;
   async function send() {
     if (!SHEET_URL || sending) return; sending = true;
@@ -32,17 +59,36 @@ const SHEET_URL = "";
   setInterval(send, 20000); window.addEventListener("online", send); send();
   window.kioskAPI = {
     async register(rec) {
+      await ready;
       const r = { name: String(rec.name || "").trim().slice(0, 80), country: String(rec.country || "").slice(0, 2), countryName: country(rec.country),
                   lang: rec.lang === "ar" ? "ar" : "en", ts: rec.ts || new Date().toISOString(), day: rec.day, hour: rec.hour };
-      const all = get(KEY, "[]"); all.push(r); put(KEY, all);
+      r.id = rid(r);
+      const all = get(KEY, "[]"); all.push(r);
+      const okLocal = put(KEY, all);
+      let okBackup = true; try { await idb.add(r); } catch (e) { okBackup = false; }
+      health.ok = okLocal || okBackup;
+      if (!okLocal) health.lastError = "Main copy could not be saved" + (okBackup ? " (kept in backup copy)" : "");
+      if (!okLocal && !okBackup) health.lastError = "Could not save on this browser – check it is not in private / guest mode";
       if (SHEET_URL) { const q = get(QKEY, "[]"); q.push(r); put(QKEY, q); send(); }
-      return { ok: true, number: all.length };
+      if (!okLocal && okBackup) { const b = await idb.all(); return { ok: true, number: b.length }; }
+      return { ok: health.ok, number: all.length };
     },
-    async list() { return get(KEY, "[]"); },
-    async info() { return { dir: SHEET_URL ? "This kiosk + your Google Sheet" : "This kiosk's browser only", startup: false }; },
+    async list() {
+      await ready;
+      const a = get(KEY, "[]");
+      try { const b = await idb.all(); if (b.length > a.length) return b.sort((x, y) => x.ts < y.ts ? -1 : 1); } catch (e) {}
+      return a;
+    },
+    async info() {
+      await ready;
+      let est = ""; try { const e = await navigator.storage.estimate(); est = Math.round((e.usage || 0) / 1024) + " KB used"; } catch (e) {}
+      let p = health.persisted; try { if (navigator.storage && navigator.storage.persisted) p = await navigator.storage.persisted(); } catch (e) {}
+      const where = SHEET_URL ? "This kiosk (2 copies) + your Google Sheet" : "This kiosk's browser (2 copies)";
+      return { dir: where + (p ? " · kept permanently" : " · not marked permanent") + (est ? " · " + est : "") + (health.lastError ? " · ⚠ " + health.lastError : ""), startup: false };
+    },
     async exportCsv() {
       const esc = v => { const s = String(v == null ? "" : v); return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
-      const rows = get(KEY, "[]").map(r => { const d = new Date(r.ts); return [r.day, pad(d.getHours()) + ":" + pad(d.getMinutes()), r.name, r.countryName || country(r.country), r.country, r.lang === "ar" ? "Arabic" : "English"].map(esc).join(","); });
+      const rows = (await this.list()).map(r => { const d = new Date(r.ts); return [r.day, pad(d.getHours()) + ":" + pad(d.getMinutes()), r.name, r.countryName || country(r.country), r.country, r.lang === "ar" ? "Arabic" : "English"].map(esc).join(","); });
       const blob = new Blob(["﻿" + ["Date,Time,Name,Country,Country code,Language", ...rows].join("\r\n")], { type: "text/csv;charset=utf-8" });
       const a = document.createElement("a"); const d = new Date();
       a.href = URL.createObjectURL(blob); a.download = `oman-pavilion-visitors-${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}.csv`;

@@ -9,6 +9,7 @@
 const STAFF_KEY = 'CHANGE-ME';
 const SHEET = 'Visitors';
 const TZ = 'Europe/Istanbul';     // event time zone: every day/hour is counted in this zone, whatever a device's clock zone is
+const EVENT_START = '2026-11-09';  // registrations from before the event (tests) are not kept
 const HEAD = ['Timestamp', 'Date', 'Time', 'Name', 'Country', 'Country code', 'Language', 'ID', 'Day', 'Hour'];
 
 /** Dashboard: GET ?key=STAFF_KEY  ->  JSON list of all visitors. */
@@ -51,6 +52,7 @@ function register(rec) {
   if (isNaN(when.getTime())) when = new Date();
   const id = clean(rec.id || (when.toISOString() + '|' + String(rec.name || '') + '|' + code));
   const day = Utilities.formatDate(when, TZ, 'yyyy-MM-dd');
+  if (day < EVENT_START) return { ok: true, skipped: 'before event' };
   const hour = Number(Utilities.formatDate(when, TZ, 'H'));
   // the leading ' keeps Sheets from turning the date/time text into date values
   const row = [when, "'" + day, "'" + Utilities.formatDate(when, TZ, 'HH:mm'), name, clean(rec.countryName || code), code,
@@ -73,14 +75,16 @@ function register(rec) {
       }
     }
     sh.appendRow(row);
+    // keep the list in time order (a device that was offline can send earlier visitors later)
+    if (n > 0 && sh.getRange(n + 1, 1).getValue() > when) sh.getRange(2, 1, n + 1, HEAD.length).sort({ column: 1, ascending: true });
   } finally {
     lock.releaseLock();
   }
   return { ok: true };
 }
 
-/** Removes repeated rows (same second + name + country), keeps the first, fills empty IDs,
- *  and recounts Date / Time / Day / Hour in the event time zone. Safe to run any time. */
+/** Removes repeated rows (same second + name + country) and rows from before the event, keeps the first,
+ *  fills empty IDs, recounts Date / Time / Day / Hour in the event time zone and sorts by time. Safe to run any time. */
 function cleanup() {
   const lock = LockService.getScriptLock();
   lock.waitLock(30000);
@@ -97,9 +101,11 @@ function cleanup() {
       if (seen.has(key)) return;
       seen.add(key);
       const day = Utilities.formatDate(t, TZ, 'yyyy-MM-dd');
+      if (day < EVENT_START) return;
       keep.push([t, "'" + day, "'" + Utilities.formatDate(t, TZ, 'HH:mm'), r[3], r[4], r[5], r[6],
                  r[7] || (t.toISOString() + '|' + String(r[3]) + '|' + r[5]).slice(0, 80), "'" + day, Number(Utilities.formatDate(t, TZ, 'H'))]);
     });
+    keep.sort((a, b) => a[0] - b[0]);
     sh.getRange(2, 1, n, HEAD.length).clearContent();
     if (keep.length) sh.getRange(2, 1, keep.length, HEAD.length).setValues(keep);
     if (keep.length && n > keep.length) sh.deleteRows(keep.length + 2, n - keep.length);

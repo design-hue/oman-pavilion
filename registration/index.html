@@ -8,6 +8,7 @@
    SHEET_URL: paste your Google Apps Script web-app URL to also save every visitor to a
    Google Sheet (see google-sheet/README). Leave "" to keep registrations only on this kiosk.
    ===================================================================== */
+const EVENT_START = "2026-11-09";   // visitors registered before this day (tests) are not sent or counted
 const SHEET_URL = "https://script.google.com/macros/s/AKfycbzwMsmOE8fIHqdQtQQ7b0HBy9xprd5Dw_fYqwWEHkPCDiRvq3iT7tD99h5ZU-JmyYeb/exec";
 
 (() => {
@@ -52,7 +53,7 @@ const SHEET_URL = "https://script.google.com/macros/s/AKfycbzwMsmOE8fIHqdQtQQ7b0
       put(SYNC, get(SYNC, "[]").filter(Boolean));
       const q = get(QKEY, "[]").filter(r => r && r.name); q.forEach(r => { r.id = rid(r); });
       const done = new Set(get(SYNC, "[]")), queued = new Set(q.map(r => r.id));
-      get(KEY, "[]").forEach(r => { if (!done.has(r.id) && !queued.has(r.id)) q.push(r); });
+      get(KEY, "[]").forEach(r => { if (!done.has(r.id) && !queued.has(r.id) && norm(r).day >= EVENT_START) q.push(r); });
       put(QKEY, q); setTimeout(send, 500);
     }
   })();
@@ -111,17 +112,19 @@ const SHEET_URL = "https://script.google.com/macros/s/AKfycbzwMsmOE8fIHqdQtQQ7b0
     /* Dashboard list: every kiosk's visitors from the Google Sheet (needs the staff code),
        plus any on this device that have not reached the sheet yet. Falls back to this device only. */
     async list() {
-      const local = await this.localList();
+      let local = await this.localList();
       const remote = await fetchCentral();
-      local.forEach(norm);
+      const ev = list => list.map(norm).filter(r => r.day >= EVENT_START);
+      local = ev(local);
       if (!remote) return local;
-      const seen = new Set(remote.map(r => ckey(r.id)));
-      const missing = local.filter(r => !seen.has(ckey(r.id)));
+      const sk = r => Math.floor(new Date(r.ts).getTime() / 1000) + "|" + String(r.name).trim() + "|" + r.country;   // same second + name + country
+      const seen = new Set(remote.map(r => ckey(r.id))), seenK = new Set(remote.map(sk));
+      const missing = local.filter(r => !seen.has(ckey(r.id)) && !seenK.has(sk(r)));
       // re-send anything this device has that the sheet doesn't (older than 2 min, so it isn't simply still on its way)
       const q = get(QKEY, "[]"), queued = new Set(q.map(r => r.id)), old = Date.now() - 120000;
       let add = false; missing.forEach(r => { if (!queued.has(r.id) && new Date(r.ts).getTime() < old) { q.push(r); add = true; } });
       if (add) { put(QKEY, q); send(); }
-      return remote.concat(missing).map(norm).sort((x, y) => x.ts < y.ts ? -1 : 1);
+      return ev(remote.concat(missing)).sort((x, y) => x.ts < y.ts ? -1 : 1);
     },
     staffKey() { try { return localStorage.getItem(SKEY) || ""; } catch (e) { return ""; } },
     setStaffKey(k) { try { localStorage.setItem(SKEY, String(k || "").trim()); } catch (e) {} },

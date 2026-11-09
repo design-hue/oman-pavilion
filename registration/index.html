@@ -8,13 +8,13 @@
    SHEET_URL: paste your Google Apps Script web-app URL to also save every visitor to a
    Google Sheet (see google-sheet/README). Leave "" to keep registrations only on this kiosk.
    ===================================================================== */
-const SHEET_URL = "";
+const SHEET_URL = "https://script.google.com/macros/s/AKfycbzwMsmOE8fIHqdQtQQ7b0HBy9xprd5Dw_fYqwWEHkPCDiRvq3iT7tD99h5ZU-JmyYeb/exec";
 
 (() => {
   /* Visitors are saved in TWO places in this kiosk's browser (localStorage + an IndexedDB backup copy),
      every save is read back to check it worked, and the browser is asked to keep the data permanently.
      If one copy is ever cleared, it is restored from the other when the page loads. */
-  const KEY = "opr-visitors", QKEY = "opr-sheet-queue";
+  const KEY = "opr-visitors", QKEY = "opr-sheet-queue", SYNC = "opr-synced", SKEY = "opr-staff-key";
   const get = (k, d) => { try { return JSON.parse(localStorage.getItem(k) || d); } catch (e) { return JSON.parse(d); } };
   const put = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); return localStorage.getItem(k) === JSON.stringify(v); } catch (e) { return false; } };
   let dn = null; try { dn = new Intl.DisplayNames(["en"], { type: "region" }); } catch (e) {}
@@ -43,7 +43,27 @@ const SHEET_URL = "";
       if (merged.length !== a.length) put(KEY, merged);
       const have = new Set(b.map(r => r.id)); for (const r of merged) if (!have.has(r.id)) await idb.add(r);
     } catch (e) { health.lastError = "Backup copy unavailable: " + (e && e.message || e); }
+    if (SHEET_URL) {   // anything registered before the Google Sheet was connected (or not sent yet) goes up now
+      const done = new Set(get(SYNC, "[]")), q = get(QKEY, "[]"), queued = new Set(q.map(r => r.id));
+      get(KEY, "[]").forEach(r => { if (!done.has(r.id) && !queued.has(r.id)) q.push(r); });
+      put(QKEY, q); setTimeout(send, 500);
+    }
   })();
+  const ckey = id => String(id || "").replace(/[\r\n\t]+/g, " ").trim().slice(0, 80);   // same as the sheet's ID column
+  let central = { state: SHEET_URL ? "idle" : "off", count: 0 };
+  async function fetchCentral() {
+    if (!SHEET_URL) return null;
+    let k = ""; try { k = (localStorage.getItem(SKEY) || "").trim(); } catch (e) {}
+    if (!k) { central.state = "nokey"; return null; }
+    const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 15000);
+    try {
+      const res = await fetch(SHEET_URL + "?key=" + encodeURIComponent(k) + "&t=" + Date.now(), { signal: ctl.signal });
+      const j = await res.json();
+      if (!j.ok) { central.state = j.error === "key" ? "badkey" : "error"; return null; }
+      central.state = "ok"; central.count = j.visitors.length; return j.visitors;
+    } catch (e) { central.state = "error"; return null; }
+    finally { clearTimeout(t); }
+  }
   let sending = false;
   async function send() {
     if (!SHEET_URL || sending) return; sending = true;
@@ -52,6 +72,7 @@ const SHEET_URL = "";
       while (q.length) {
         try { await fetch(SHEET_URL, { method: "POST", mode: "no-cors", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify(q[0]) }); }
         catch (e) { break; }
+        const done = get(SYNC, "[]"); done.push(q[0].id); put(SYNC, done);
         q.shift(); put(QKEY, q);
       }
     } finally { sending = false; }
@@ -62,7 +83,7 @@ const SHEET_URL = "";
       await ready;
       const r = { name: String(rec.name || "").trim().slice(0, 80), country: String(rec.country || "").slice(0, 2), countryName: country(rec.country),
                   lang: rec.lang === "ar" ? "ar" : "en", ts: rec.ts || new Date().toISOString(), day: rec.day, hour: rec.hour };
-      r.id = rid(r);
+      r.id = "v-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
       const all = get(KEY, "[]"); all.push(r);
       const okLocal = put(KEY, all);
       let okBackup = true; try { await idb.add(r); } catch (e) { okBackup = false; }
@@ -73,18 +94,42 @@ const SHEET_URL = "";
       if (!okLocal && okBackup) { const b = await idb.all(); return { ok: true, number: b.length }; }
       return { ok: health.ok, number: all.length };
     },
-    async list() {
+    async localList() {
       await ready;
       const a = get(KEY, "[]");
       try { const b = await idb.all(); if (b.length > a.length) return b.sort((x, y) => x.ts < y.ts ? -1 : 1); } catch (e) {}
       return a;
     },
+    /* Dashboard list: every kiosk's visitors from the Google Sheet (needs the staff code),
+       plus any on this device that have not reached the sheet yet. Falls back to this device only. */
+    async list() {
+      const local = await this.localList();
+      const remote = await fetchCentral();
+      if (!remote) return local;
+      const seen = new Set(remote.map(r => ckey(r.id)));
+      const missing = local.filter(r => !seen.has(ckey(r.id)));
+      // re-send anything this device has that the sheet doesn't (older than 2 min, so it isn't simply still on its way)
+      const q = get(QKEY, "[]"), queued = new Set(q.map(r => r.id)), old = Date.now() - 120000;
+      let add = false; missing.forEach(r => { if (!queued.has(r.id) && new Date(r.ts).getTime() < old) { q.push(r); add = true; } });
+      if (add) { put(QKEY, q); send(); }
+      return remote.concat(missing).sort((x, y) => x.ts < y.ts ? -1 : 1);
+    },
+    staffKey() { try { return localStorage.getItem(SKEY) || ""; } catch (e) { return ""; } },
+    setStaffKey(k) { try { localStorage.setItem(SKEY, String(k || "").trim()); } catch (e) {} },
+    central() { return Object.assign({ connected: !!SHEET_URL, pending: get(QKEY, "[]").length }, central); },
     async info() {
       await ready;
       let est = ""; try { const e = await navigator.storage.estimate(); est = Math.round((e.usage || 0) / 1024) + " KB used"; } catch (e) {}
       let p = health.persisted; try { if (navigator.storage && navigator.storage.persisted) p = await navigator.storage.persisted(); } catch (e) {}
-      const where = SHEET_URL ? "This kiosk (2 copies) + your Google Sheet" : "This kiosk's browser (2 copies)";
-      return { dir: where + (p ? " · kept permanently" : " · not marked permanent") + (est ? " · " + est : "") + (health.lastError ? " · ⚠ " + health.lastError : ""), startup: false };
+      const c = central.state;
+      const where = !SHEET_URL ? "This kiosk's browser (2 copies)"
+        : c === "ok" ? "Google Sheet – all kiosks and devices"
+        : c === "nokey" || c === "badkey" ? "This device only (enter the staff code to see all kiosks)"
+        : c === "error" ? "This device only ⚠ Google Sheet not reachable right now"
+        : "Google Sheet + this device";
+      const pend = SHEET_URL ? get(QKEY, "[]").length : 0;
+      const localInfo = c === "ok" ? "" : (p ? " · kept permanently" : " · not marked permanent") + (est ? " · " + est : "");
+      return { central: c, dir: where + (pend ? " · " + pend + " waiting to upload" : "") + localInfo + (health.lastError ? " · ⚠ " + health.lastError : ""), startup: false };
     },
     async exportCsv() {
       const esc = v => { const s = String(v == null ? "" : v); return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
@@ -314,6 +359,7 @@ body.dash .orbit{display:none}
 .btn{border:1.5px solid var(--line);background:var(--bg-2);border-radius:999px;padding:10px 18px;font-size:15px;font-weight:600;color:var(--cream);min-height:44px;display:inline-flex;align-items:center;text-decoration:none}
 .btn.gold{background:var(--gold);color:#3a0d39;border-color:var(--gold)}
 .btn:disabled{opacity:.45}
+.staff-in{flex:1 1 200px;min-height:44px;border-radius:999px;border:1.5px solid var(--line);background:var(--bg);color:var(--cream);padding:0 18px;font:inherit;font-size:16px}
 .note{background:var(--bg-2);border:1px solid var(--line);border-radius:var(--r-md);padding:12px 16px;color:var(--muted);font-size:15px}
 .note.warn{border-color:var(--gold);color:var(--cream)}
 .kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
@@ -426,8 +472,10 @@ async function submit(rec) {
 }
 
 /* ------------------------------------------------------------------ routing */
-const route = () => location.hash === "#dashboard" ? "dashboard" : "kiosk";
+const route = () => location.hash.startsWith("#dashboard") ? "dashboard" : "kiosk";
 function show() {
+  const km = location.hash.match(/^#dashboard[&?]k=([^&]*)/);   // #dashboard&k=CODE saves the staff code on this device
+  if (km && API && API.setStaffKey) { API.setStaffKey(decodeURIComponent(km[1])); history.replaceState(null, "", location.pathname + location.search + "#dashboard"); }
   const r = route();
   $("#kiosk").hidden = r !== "kiosk"; $("#dash").hidden = r !== "dashboard";
   document.body.classList.toggle("dash", r === "dashboard");
@@ -628,7 +676,8 @@ const Dash = (() => {
     try { if (API) info = await API.info(); } catch (e) {}
     render();
   }
-  function open() { render(); load(); }
+  let auto = null;
+  function open() { render(); load(); clearInterval(auto); auto = setInterval(() => { if (route() === "dashboard" && !document.hidden) load(); else if (route() !== "dashboard") clearInterval(auto); }, 30000); }
   const tip = $("#tip");
   function withTip(node, text) {
     node.addEventListener("pointerenter", () => { tip.textContent = text; tip.hidden = false; });
@@ -678,6 +727,15 @@ const Dash = (() => {
         el("button", { class: "btn", type: "button", text: "Refresh", onclick: load }),
         el("a", { class: "btn", href: "#kiosk" }, "Back to kiosk"))));
     if (msg) root.append(el("p", { class: "note", text: msg }));
+    if (API && API.setStaffKey && (info.central === "nokey" || info.central === "badkey")) {
+      const inp = el("input", { type: "password", class: "staff-in", placeholder: "Staff code", autocomplete: "off", "aria-label": "Staff code" });
+      const save = () => { API.setStaffKey(inp.value); msg = ""; load(); };
+      inp.addEventListener("keydown", e => { if (e.key === "Enter") save(); });
+      root.append(el("div", { class: "panel staff" },
+        el("h3", { text: info.central === "badkey" ? "That staff code didn't work" : "See visitors from every kiosk" }),
+        el("p", { class: "cap", text: "Enter the staff code once on this device. Until then, only visitors registered on this device are shown." }),
+        el("div", { class: "btns" }, inp, el("button", { class: "btn gold", type: "button", text: "Show all visitors", onclick: save }))));
+    }
     if (!API) root.append(el("p", { class: "note warn", text: "Opened outside the app: registrations are kept only in this browser. Run Oman Pavilion Registration.exe to save them to disk." }));
 
     root.append(el("div", { class: "kpis" },
@@ -727,6 +785,6 @@ show();
 })();
 </script>
 
-<script>window.KIOSK_MENU = { pos: { left: 830, bottom: 44 }, show: () => document.body.dataset.screen === "welcome" && location.hash !== "#dashboard" };</script>
+<script>window.KIOSK_MENU = { pos: { left: 830, bottom: 44 }, show: () => document.body.dataset.screen === "welcome" && !location.hash.startsWith("#dashboard") };</script>
 <script src="../kiosk-menu.js"></script>
 </body></html>

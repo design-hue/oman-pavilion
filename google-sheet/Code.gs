@@ -8,6 +8,7 @@
  */
 const STAFF_KEY = 'CHANGE-ME';
 const SHEET = 'Visitors';
+const TZ = 'Europe/Istanbul';     // event time zone: every day/hour is counted in this zone, whatever a device's clock zone is
 const HEAD = ['Timestamp', 'Date', 'Time', 'Name', 'Country', 'Country code', 'Language', 'ID', 'Day', 'Hour'];
 
 /** Dashboard: GET ?key=STAFF_KEY  ->  JSON list of all visitors. */
@@ -18,14 +19,11 @@ function doGet(e) {
   const sh = sheet_();
   const n = sh.getLastRow() - 1;
   const rows = n > 0 ? sh.getRange(2, 1, n, HEAD.length).getValues() : [];
-  const tz = tz_();
-  const ymd = v => v instanceof Date ? Utilities.formatDate(v, tz, 'yyyy-MM-dd') : String(v || '').replace(/^'/, '');
   const out = rows.filter(r => r[3]).map(r => {
     const ts = r[0] instanceof Date ? r[0] : new Date(r[0]);
     return { ts: ts.toISOString(), name: String(r[3]).replace(/^'/, ''), countryName: String(r[4]), country: String(r[5]),
              lang: r[6] === 'Arabic' ? 'ar' : 'en', id: String(r[7] || ''),
-             day: ymd(r[8]) || ymd(r[1]) || Utilities.formatDate(ts, tz, 'yyyy-MM-dd'),
-             hour: r[9] === '' || r[9] == null ? Number(Utilities.formatDate(ts, tz, 'H')) : Number(r[9]) };
+             day: Utilities.formatDate(ts, TZ, 'yyyy-MM-dd'), hour: Number(Utilities.formatDate(ts, TZ, 'H')) };
   });
   return json_({ ok: true, visitors: out });
 }
@@ -49,24 +47,66 @@ function register(rec) {
   const name = clean(rec && rec.name);
   const code = String(rec && rec.country || '').toUpperCase().replace(/[^A-Z]/g, '').slice(0, 2);
   if (!name || code.length !== 2) throw new Error('Missing name or country');
-  const id = clean(rec.id || '');
-  const tz = tz_();
-  const when = rec && rec.ts ? new Date(rec.ts) : new Date();
-  const day = /^\d{4}-\d{2}-\d{2}$/.test(String(rec.day || '')) ? String(rec.day) : Utilities.formatDate(when, tz, 'yyyy-MM-dd');
-  const hour = rec.hour === 0 || rec.hour ? Number(rec.hour) : Number(Utilities.formatDate(when, tz, 'H'));
+  let when = rec && rec.ts ? new Date(rec.ts) : new Date();
+  if (isNaN(when.getTime())) when = new Date();
+  const id = clean(rec.id || (when.toISOString() + '|' + String(rec.name || '') + '|' + code));
+  const day = Utilities.formatDate(when, TZ, 'yyyy-MM-dd');
+  const hour = Number(Utilities.formatDate(when, TZ, 'H'));
   // the leading ' keeps Sheets from turning the date/time text into date values
-  const row = [when, "'" + day, "'" + Utilities.formatDate(when, tz, 'HH:mm'), name, clean(rec.countryName || code), code,
+  const row = [when, "'" + day, "'" + Utilities.formatDate(when, TZ, 'HH:mm'), name, clean(rec.countryName || code), code,
                rec && rec.lang === 'ar' ? 'Arabic' : 'English', id, "'" + day, hour];
   const lock = LockService.getScriptLock();
   lock.waitLock(15000);
   try {
     const sh = sheet_();
-    if (id && sh.getLastRow() > 1 && sh.getRange(2, 8, sh.getLastRow() - 1, 1).createTextFinder(id).matchEntireCell(true).findNext()) return { ok: true, dup: true };
+    const n = sh.getLastRow() - 1;
+    if (n > 0) {
+      if (sh.getRange(2, 8, n, 1).createTextFinder(id).matchEntireCell(true).findNext()) return { ok: true, dup: true };
+      // same person, same second, same country = the same registration sent again
+      const vals = sh.getRange(2, 1, n, 8).getValues(), sec = Math.floor(when.getTime() / 1000);
+      for (let i = 0; i < vals.length; i++) {
+        const t = vals[i][0] instanceof Date ? vals[i][0].getTime() : NaN;
+        if (Math.floor(t / 1000) === sec && String(vals[i][3]) === name.replace(/^'/, '') && vals[i][5] === code) {
+          if (!vals[i][7]) sh.getRange(i + 2, 8).setValue(id);
+          return { ok: true, dup: true };
+        }
+      }
+    }
     sh.appendRow(row);
   } finally {
     lock.releaseLock();
   }
   return { ok: true };
+}
+
+/** Removes repeated rows (same second + name + country), keeps the first, fills empty IDs,
+ *  and recounts Date / Time / Day / Hour in the event time zone. Safe to run any time. */
+function cleanup() {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    const sh = sheet_();
+    const n = sh.getLastRow() - 1;
+    if (n < 1) return 'nothing to do';
+    const vals = sh.getRange(2, 1, n, HEAD.length).getValues();
+    const seen = new Set(), keep = [];
+    vals.forEach(r => {
+      if (!r[3]) return;
+      const t = r[0] instanceof Date ? r[0] : new Date(r[0]);
+      const key = Math.floor(t.getTime() / 1000) + '|' + String(r[3]).trim() + '|' + r[5];
+      if (seen.has(key)) return;
+      seen.add(key);
+      const day = Utilities.formatDate(t, TZ, 'yyyy-MM-dd');
+      keep.push([t, "'" + day, "'" + Utilities.formatDate(t, TZ, 'HH:mm'), r[3], r[4], r[5], r[6],
+                 r[7] || (t.toISOString() + '|' + String(r[3]) + '|' + r[5]).slice(0, 80), "'" + day, Number(Utilities.formatDate(t, TZ, 'H'))]);
+    });
+    sh.getRange(2, 1, n, HEAD.length).clearContent();
+    if (keep.length) sh.getRange(2, 1, keep.length, HEAD.length).setValues(keep);
+    if (keep.length && n > keep.length) sh.deleteRows(keep.length + 2, n - keep.length);
+    return 'kept ' + keep.length + ' of ' + n;
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 /** Run once from the editor (select "setup" and press Run) to create the sheets. */

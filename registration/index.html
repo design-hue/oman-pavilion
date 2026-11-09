@@ -20,6 +20,10 @@ const SHEET_URL = "https://script.google.com/macros/s/AKfycbzwMsmOE8fIHqdQtQQ7b0
   let dn = null; try { dn = new Intl.DisplayNames(["en"], { type: "region" }); } catch (e) {}
   const country = c => { try { return (dn && dn.of(c)) || c; } catch (e) { return c; } };
   const pad = n => String(n).padStart(2, "0");
+  // Every day and hour is counted in the event's time zone, even if a device's clock is set to another zone.
+  const fD = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Istanbul", year: "numeric", month: "2-digit", day: "2-digit" });
+  const fH = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Istanbul", hour: "2-digit", hourCycle: "h23" });
+  const norm = r => { const d = new Date(r.ts); if (!isNaN(d)) { r.day = fD.format(d); r.hour = Number(fH.format(d)); } return r; };
   // ---- IndexedDB backup copy ----
   const idb = (() => {
     let dbp = null;
@@ -38,13 +42,16 @@ const SHEET_URL = "https://script.google.com/macros/s/AKfycbzwMsmOE8fIHqdQtQQ7b0
   const ready = (async () => {
     try {
       const a = get(KEY, "[]"), b = await idb.all();
+      const noIds = a.some(r => !r.id);   // visitors saved by older versions have no ID: give them one so they are sent only once
       const map = new Map(); a.concat(b).forEach(r => { r.id = rid(r); map.set(r.id, r); });
       const merged = [...map.values()].sort((x, y) => x.ts < y.ts ? -1 : 1);
-      if (merged.length !== a.length) put(KEY, merged);
+      if (merged.length !== a.length || noIds) put(KEY, merged);
       const have = new Set(b.map(r => r.id)); for (const r of merged) if (!have.has(r.id)) await idb.add(r);
     } catch (e) { health.lastError = "Backup copy unavailable: " + (e && e.message || e); }
     if (SHEET_URL) {   // anything registered before the Google Sheet was connected (or not sent yet) goes up now
-      const done = new Set(get(SYNC, "[]")), q = get(QKEY, "[]"), queued = new Set(q.map(r => r.id));
+      put(SYNC, get(SYNC, "[]").filter(Boolean));
+      const q = get(QKEY, "[]").filter(r => r && r.name); q.forEach(r => { r.id = rid(r); });
+      const done = new Set(get(SYNC, "[]")), queued = new Set(q.map(r => r.id));
       get(KEY, "[]").forEach(r => { if (!done.has(r.id) && !queued.has(r.id)) q.push(r); });
       put(QKEY, q); setTimeout(send, 500);
     }
@@ -72,7 +79,7 @@ const SHEET_URL = "https://script.google.com/macros/s/AKfycbzwMsmOE8fIHqdQtQQ7b0
       while (q.length) {
         try { await fetch(SHEET_URL, { method: "POST", mode: "no-cors", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify(q[0]) }); }
         catch (e) { break; }
-        const done = get(SYNC, "[]"); done.push(q[0].id); put(SYNC, done);
+        if (q[0].id) { const done = get(SYNC, "[]"); done.push(q[0].id); put(SYNC, done); }
         q.shift(); put(QKEY, q);
       }
     } finally { sending = false; }
@@ -84,6 +91,7 @@ const SHEET_URL = "https://script.google.com/macros/s/AKfycbzwMsmOE8fIHqdQtQQ7b0
       const r = { name: String(rec.name || "").trim().slice(0, 80), country: String(rec.country || "").slice(0, 2), countryName: country(rec.country),
                   lang: rec.lang === "ar" ? "ar" : "en", ts: rec.ts || new Date().toISOString(), day: rec.day, hour: rec.hour };
       r.id = "v-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
+      norm(r);
       const all = get(KEY, "[]"); all.push(r);
       const okLocal = put(KEY, all);
       let okBackup = true; try { await idb.add(r); } catch (e) { okBackup = false; }
@@ -105,6 +113,7 @@ const SHEET_URL = "https://script.google.com/macros/s/AKfycbzwMsmOE8fIHqdQtQQ7b0
     async list() {
       const local = await this.localList();
       const remote = await fetchCentral();
+      local.forEach(norm);
       if (!remote) return local;
       const seen = new Set(remote.map(r => ckey(r.id)));
       const missing = local.filter(r => !seen.has(ckey(r.id)));
@@ -112,7 +121,7 @@ const SHEET_URL = "https://script.google.com/macros/s/AKfycbzwMsmOE8fIHqdQtQQ7b0
       const q = get(QKEY, "[]"), queued = new Set(q.map(r => r.id)), old = Date.now() - 120000;
       let add = false; missing.forEach(r => { if (!queued.has(r.id) && new Date(r.ts).getTime() < old) { q.push(r); add = true; } });
       if (add) { put(QKEY, q); send(); }
-      return remote.concat(missing).sort((x, y) => x.ts < y.ts ? -1 : 1);
+      return remote.concat(missing).map(norm).sort((x, y) => x.ts < y.ts ? -1 : 1);
     },
     staffKey() { try { return localStorage.getItem(SKEY) || ""; } catch (e) { return ""; } },
     setStaffKey(k) { try { localStorage.setItem(SKEY, String(k || "").trim()); } catch (e) {} },
@@ -133,7 +142,8 @@ const SHEET_URL = "https://script.google.com/macros/s/AKfycbzwMsmOE8fIHqdQtQQ7b0
     },
     async exportCsv() {
       const esc = v => { const s = String(v == null ? "" : v); return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
-      const rows = (await this.list()).map(r => { const d = new Date(r.ts); return [r.day, pad(d.getHours()) + ":" + pad(d.getMinutes()), r.name, r.countryName || country(r.country), r.country, r.lang === "ar" ? "Arabic" : "English"].map(esc).join(","); });
+      const fT = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Istanbul", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+      const rows = (await this.list()).map(r => { const d = new Date(r.ts); return [r.day, fT.format(d), r.name, r.countryName || country(r.country), r.country, r.lang === "ar" ? "Arabic" : "English"].map(esc).join(","); });
       const blob = new Blob(["﻿" + ["Date,Time,Name,Country,Country code,Language", ...rows].join("\r\n")], { type: "text/csv;charset=utf-8" });
       const a = document.createElement("a"); const d = new Date();
       a.href = URL.createObjectURL(blob); a.download = `oman-pavilion-visitors-${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}.csv`;
@@ -453,7 +463,9 @@ const el = (tag, attrs = {}, ...kids) => {
 const svgIcon = inner => { const s = document.createElementNS("http://www.w3.org/2000/svg", "svg"); s.setAttribute("viewBox", "0 0 24 24"); s.setAttribute("fill", "none"); s.setAttribute("stroke", "currentColor"); s.setAttribute("stroke-width", "2"); s.setAttribute("stroke-linecap", "round"); s.setAttribute("stroke-linejoin", "round"); s.innerHTML = inner; return s; };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const pad = n => String(n).padStart(2, "0");
-const dayKey = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const EV_D = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Istanbul", year: "numeric", month: "2-digit", day: "2-digit" });
+const EV_H = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Istanbul", hour: "2-digit", hourCycle: "h23" });
+const dayKey = d => EV_D.format(d);   // event days and hours are always Istanbul time
 const fmt = n => (n || 0).toLocaleString("en-US");
 const store = {
   get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
@@ -630,7 +642,7 @@ const Kiosk = (() => {
     async function finish() {
       reg.disabled = true;
       const now = new Date();
-      const rec = { name: S.name.trim(), country: S.country, lang: S.lang, ts: now.toISOString(), day: dayKey(now), hour: now.getHours() };
+      const rec = { name: S.name.trim(), country: S.country, lang: S.lang, ts: now.toISOString(), day: dayKey(now), hour: Number(EV_H.format(now)) };
       go("done");
       const n = await submit(rec);
       if (n) S.number = n;
@@ -739,7 +751,7 @@ const Dash = (() => {
     if (!API) root.append(el("p", { class: "note warn", text: "Opened outside the app: registrations are kept only in this browser. Run Oman Pavilion Registration.exe to save them to disk." }));
 
     root.append(el("div", { class: "kpis" },
-      el("div", { class: "kpi" }, el("span", { text: "Visitors today" }), el("b", { class: "tab", text: fmt(todayRecs.length) }), el("small", { text: new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" }) })),
+      el("div", { class: "kpi" }, el("span", { text: "Visitors today" }), el("b", { class: "tab", text: fmt(todayRecs.length) }), el("small", { text: new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", timeZone: "Europe/Istanbul" }) })),
       el("div", { class: "kpi" }, el("span", { text: "Visitors, all days" }), el("b", { class: "tab", text: fmt(recs.length) }), el("small", { text: `${days.length} of 12 event days so far` })),
       el("div", { class: "kpi" }, el("span", { text: "Countries" }), el("b", { class: "tab", text: fmt(allCountries.size) }), el("small", { text: "represented so far" })),
       el("div", { class: "kpi" }, el("span", { text: "Busiest hour today" }), el("b", { class: "tab", text: busiest ? `${busiest[0]}:00` : "—" }), el("small", { text: busiest ? `${fmt(busiest[1])} visitors` : "no visitors yet today" }))));
@@ -759,7 +771,7 @@ const Dash = (() => {
     const recent = recs.slice(-25).reverse();
     const tb = el("tbody");
     recent.forEach(r => { const d = new Date(r.ts); tb.append(el("tr", {},
-      el("td", { text: `${d.toLocaleDateString("en-GB", { day: "numeric", month: "short" })} ${pad(d.getHours())}:${pad(d.getMinutes())}` }),
+      el("td", { text: d.toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: "Europe/Istanbul" }).replace(",", "") }),
       el("td", { dir: "auto", text: r.name }), el("td", { text: cname(r.country, "en") }))); });
     root.append(el("div", { class: "grid2" },
       hbars(shown, "Where visitors come from", scope === "today" ? "Today, top 12 countries" : "All days, top 12 countries", k => k === "__other" ? `Other (${topC.length - 12} countries)` : cname(k, "en")),

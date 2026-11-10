@@ -16,6 +16,9 @@ const SHEET_URL = "https://script.google.com/macros/s/AKfycbzwMsmOE8fIHqdQtQQ7b0
      every save is read back to check it worked, and the browser is asked to keep the data permanently.
      If one copy is ever cleared, it is restored from the other when the page loads. */
   const KEY = "opr-visitors", QKEY = "opr-sheet-queue", SYNC = "opr-synced", SKEY = "opr-staff-key";
+  // Public, view-only report at #report: anyone with that link sees the live report and can download the CSV.
+  const REPORT_KEY = "1UB54SUF";
+  const isReport = () => location.hash.startsWith("#report");
   const get = (k, d) => { try { return JSON.parse(localStorage.getItem(k) || d); } catch (e) { return JSON.parse(d); } };
   const put = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); return localStorage.getItem(k) === JSON.stringify(v); } catch (e) { return false; } };
   let dn = null; try { dn = new Intl.DisplayNames(["en"], { type: "region" }); } catch (e) {}
@@ -62,6 +65,7 @@ const SHEET_URL = "https://script.google.com/macros/s/AKfycbzwMsmOE8fIHqdQtQQ7b0
   async function fetchCentral() {
     if (!SHEET_URL) return null;
     let k = ""; try { k = (localStorage.getItem(SKEY) || "").trim(); } catch (e) {}
+    if (isReport()) k = REPORT_KEY;
     if (!k) { central.state = "nokey"; return null; }
     const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 15000);
     try {
@@ -112,9 +116,14 @@ const SHEET_URL = "https://script.google.com/macros/s/AKfycbzwMsmOE8fIHqdQtQQ7b0
     /* Dashboard list: every kiosk's visitors from the Google Sheet (needs the staff code),
        plus any on this device that have not reached the sheet yet. Falls back to this device only. */
     async list() {
+      const ev = list => list.map(norm).filter(r => r.day >= EVENT_START);
+      if (isReport()) {   // view-only report: the shared Google Sheet only, nothing from this device
+        const remote = await fetchCentral();
+        if (!remote) throw new Error("The live visitor list can't be reached right now. Please press Refresh in a moment.");
+        return ev(remote).sort((x, y) => x.ts < y.ts ? -1 : 1);
+      }
       let local = await this.localList();
       const remote = await fetchCentral();
-      const ev = list => list.map(norm).filter(r => r.day >= EVENT_START);
       local = ev(local);
       if (!remote) return local;
       const sk = r => Math.floor(new Date(r.ts).getTime() / 1000) + "|" + String(r.name).trim() + "|" + r.country;   // same second + name + country
@@ -487,7 +496,8 @@ async function submit(rec) {
 }
 
 /* ------------------------------------------------------------------ routing */
-const route = () => location.hash.startsWith("#dashboard") ? "dashboard" : "kiosk";
+const isReportView = () => location.hash.startsWith("#report");
+const route = () => (location.hash.startsWith("#dashboard") || isReportView()) ? "dashboard" : "kiosk";
 function show() {
   const km = location.hash.match(/^#dashboard[&?]k=([^&]*)/);   // #dashboard&k=CODE saves the staff code on this device
   if (km && API && API.setStaffKey) { API.setStaffKey(decodeURIComponent(km[1])); history.replaceState(null, "", location.pathname + location.search + "#dashboard"); }
@@ -687,7 +697,8 @@ const Dash = (() => {
   const root = $("#dash");
   let recs = [], scope = "today", info = { dir: "", startup: false }, msg = "";
   async function load() {
-    try { recs = API ? await API.list() : store.get("opr-local", []); } catch (e) { recs = []; }
+    try { recs = API ? await API.list() : store.get("opr-local", []); if (isReportView() && msg.startsWith("The live")) msg = ""; }
+    catch (e) { if (isReportView()) msg = (e && e.message) || "The live visitor list can't be reached right now."; else recs = []; }   // the report keeps the last good numbers on a hiccup
     try { if (API) info = await API.info(); } catch (e) {}
     render();
   }
@@ -735,14 +746,14 @@ const Dash = (() => {
     const busiest = Object.entries(byHour).sort((a, b) => b[1] - a[1])[0];
 
     root.append(el("div", { class: "dh" },
-      el("div", {}, el("h1", { text: "Oman Pavilion visitors" }), el("p", { class: "sub", text: "Saved on: " + (info.dir || "this kiosk") + " · COP31, 12 days" })),
+      el("div", {}, el("h1", { text: "Oman Pavilion visitors" }), el("p", { class: "sub", text: isReportView() ? "Live report from all kiosks · updates every 30 seconds · COP31, 12 days" : "Saved on: " + (info.dir || "this kiosk") + " · COP31, 12 days" })),
       el("div", { class: "btns" },
         API ? el("button", { class: "btn gold", type: "button", text: "Download visitor list (CSV)", onclick: () => act(() => API.exportCsv(), "Saved.") }) : null,
         API && API.openFolder ? el("button", { class: "btn", type: "button", text: "Open data folder", onclick: () => act(() => API.openFolder(), "") }) : null,
         el("button", { class: "btn", type: "button", text: "Refresh", onclick: load }),
-        el("a", { class: "btn", href: "#kiosk" }, "Back to kiosk"))));
+        isReportView() ? null : el("a", { class: "btn", href: "#kiosk" }, "Back to kiosk"))));
     if (msg) root.append(el("p", { class: "note", text: msg }));
-    if (API && API.setStaffKey && (info.central === "nokey" || info.central === "badkey")) {
+    if (!isReportView() && API && API.setStaffKey && (info.central === "nokey" || info.central === "badkey")) {
       const inp = el("input", { type: "password", class: "staff-in", placeholder: "Staff code", autocomplete: "off", "aria-label": "Staff code" });
       const save = () => { API.setStaffKey(inp.value); msg = ""; load(); };
       inp.addEventListener("keydown", e => { if (e.key === "Enter") save(); });
@@ -800,6 +811,6 @@ show();
 })();
 </script>
 
-<script>window.KIOSK_MENU = { pos: { left: 830, bottom: 44 }, show: () => document.body.dataset.screen === "welcome" && !location.hash.startsWith("#dashboard") };</script>
+<script>window.KIOSK_MENU = { pos: { left: 830, bottom: 44 }, show: () => document.body.dataset.screen === "welcome" && !location.hash.startsWith("#dashboard") && !location.hash.startsWith("#report") };</script>
 <script src="../kiosk-menu.js"></script>
 </body></html>

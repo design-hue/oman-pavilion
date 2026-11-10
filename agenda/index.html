@@ -64,34 +64,45 @@ main{position:fixed;inset:0;display:grid;place-items:center}
 .count span{font-size:calc(15*var(--u));letter-spacing:.16em;text-transform:uppercase;color:var(--soft);font-weight:700}
 
 .listwrap{position:relative;flex:1;min-height:0;margin-top:calc(22*var(--u))}
-.list{position:absolute;inset:0;overflow-y:auto;overscroll-behavior:contain;padding:0 calc(10*var(--u)) calc(60*var(--u)) 0;scrollbar-width:none;touch-action:pan-y;
-  -webkit-mask-image:linear-gradient(#000 calc(100% - 90*var(--u)),transparent);mask-image:linear-gradient(#000 calc(100% - 90*var(--u)),transparent)}
+.listwrap{overflow:hidden}
+/* the whole day on one screen: cards flow into 1-3 columns (top to bottom, in time order) and are sized to fit */
+.list{--k:1;position:relative;column-gap:calc(18*var(--u));column-fill:balance;padding:0;touch-action:pan-y}
+.list .s{break-inside:avoid;-webkit-column-break-inside:avoid;page-break-inside:avoid}
+/* compact cards for 2-3 columns: time sits on the first line next to the session type */
+.list.compact .s{display:grid;grid-template-columns:auto 1fr;column-gap:calc(18*var(--u)*var(--k));align-items:center}
+.list.compact .s .bd{display:contents}
+.list.compact .s .tm{width:auto;display:flex;align-items:baseline;gap:calc(10*var(--u)*var(--k));grid-column:1;grid-row:1}
+.list.compact .s .tm b{display:inline;font-size:calc(34*var(--u)*var(--k))}
+.list.compact .s .pill{grid-column:2;grid-row:1;justify-self:start}
+.list.compact .s h2{grid-column:1/-1;grid-row:2}
+.list.compact .s .meta{grid-column:1/-1;grid-row:3}
+.list.compact .flag{position:static;grid-column:1/-1;grid-row:4;justify-self:start;margin-top:calc(10*var(--u)*var(--k))}
 .list::-webkit-scrollbar{display:none}
-.s{position:relative;display:flex;gap:calc(28*var(--u));padding:calc(24*var(--u)) calc(30*var(--u)) calc(26*var(--u)) calc(28*var(--u));margin-bottom:calc(16*var(--u));border-radius:calc(26*var(--u));
+.s{position:relative;display:flex;width:100%;gap:calc(28*var(--u)*var(--k));padding:calc(24*var(--u)*var(--k)) calc(30*var(--u)*var(--k)) calc(26*var(--u)*var(--k)) calc(28*var(--u)*var(--k));margin-bottom:calc(16*var(--u)*var(--k));border-radius:calc(26*var(--u)*var(--k));
   background:linear-gradient(170deg,rgba(255,255,255,.11),rgba(255,255,255,.035));border:1px solid var(--line);overflow:hidden;animation:in .6s cubic-bezier(.2,.9,.3,1) both;animation-delay:calc(var(--i)*55ms)}
-@keyframes in{from{opacity:0;transform:translateY(calc(40*var(--u)))}}
-.s::before{content:"";position:absolute;left:0;top:0;bottom:0;width:calc(8*var(--u));background:var(--c)}
-.s .tm{flex:none;width:calc(150*var(--u))}
-.s .tm b{display:block;font-size:calc(40*var(--u));line-height:1.05;font-weight:700}
-.s .tm span{font-size:calc(20*var(--u));color:var(--soft)}
-.s .tm.tbc b{font-size:calc(34*var(--u));color:var(--cream)}
+@keyframes in{from{opacity:0;transform:translateY(calc(40*var(--u)*var(--k)))}}
+.s::before{content:"";position:absolute;left:0;top:0;bottom:0;width:calc(8*var(--u)*var(--k));background:var(--c)}
+.s .tm{flex:none;width:calc(150*var(--u)*var(--k))}
+.s .tm b{display:block;font-size:calc(40*var(--u)*var(--k));line-height:1.05;font-weight:700}
+.s .tm span{font-size:calc(20*var(--u)*var(--k));color:var(--soft)}
+.s .tm.tbc b{font-size:calc(34*var(--u)*var(--k));color:var(--cream)}
 .s .bd{flex:1;min-width:0}
-.pill{display:inline-flex;align-items:center;gap:calc(8*var(--u));font-size:calc(15*var(--u));font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--c);
-  background:color-mix(in srgb,var(--c) 16%,transparent);border-radius:99px;padding:calc(5*var(--u)) calc(14*var(--u)) calc(5*var(--u)) calc(10*var(--u))}
-.pill svg{width:calc(18*var(--u));height:calc(18*var(--u))}
-.s h2{font-size:calc(28*var(--u));line-height:1.28;font-weight:700;margin-top:calc(10*var(--u))}
-.meta{margin-top:calc(10*var(--u));display:grid;gap:calc(5*var(--u))}
-.meta p{display:flex;gap:calc(10*var(--u));font-size:calc(19*var(--u));line-height:1.4;color:var(--lilac)}
-.meta p svg{flex:none;width:calc(22*var(--u));height:calc(22*var(--u));margin-top:calc(2*var(--u));color:var(--c)}
+.pill{display:inline-flex;align-items:center;gap:calc(8*var(--u)*var(--k));font-size:calc(15*var(--u)*var(--k));font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--c);
+  background:color-mix(in srgb,var(--c) 16%,transparent);border-radius:99px;padding:calc(5*var(--u)*var(--k)) calc(14*var(--u)*var(--k)) calc(5*var(--u)*var(--k)) calc(10*var(--u)*var(--k))}
+.pill svg{width:calc(18*var(--u)*var(--k));height:calc(18*var(--u)*var(--k))}
+.s h2{font-size:calc(28*var(--u)*var(--k));line-height:1.28;font-weight:700;margin-top:calc(10*var(--u)*var(--k))}
+.meta{margin-top:calc(10*var(--u)*var(--k));display:grid;gap:calc(5*var(--u)*var(--k))}
+.meta p{display:flex;gap:calc(10*var(--u)*var(--k));font-size:calc(19*var(--u)*var(--k));line-height:1.4;color:var(--lilac)}
+.meta p svg{flex:none;width:calc(22*var(--u)*var(--k));height:calc(22*var(--u)*var(--k));margin-top:calc(2*var(--u)*var(--k));color:var(--c)}
 .meta p b{color:var(--ink);font-weight:600}
-.s.now{border-color:var(--gold);background:linear-gradient(170deg,rgba(252,175,23,.2),rgba(255,255,255,.04));box-shadow:0 0 0 calc(2*var(--u)) rgba(252,175,23,.35)}
-.flag{position:absolute;right:calc(24*var(--u));top:calc(22*var(--u));font-size:calc(15*var(--u));font-weight:700;letter-spacing:.14em;border-radius:99px;padding:calc(4*var(--u)) calc(12*var(--u))}
+.s.now{border-color:var(--gold);background:linear-gradient(170deg,rgba(252,175,23,.2),rgba(255,255,255,.04));box-shadow:0 0 0 calc(2*var(--u)*var(--k)) rgba(252,175,23,.35)}
+.flag{position:absolute;right:calc(24*var(--u)*var(--k));top:calc(22*var(--u)*var(--k));font-size:calc(15*var(--u)*var(--k));font-weight:700;letter-spacing:.14em;border-radius:99px;padding:calc(4*var(--u)*var(--k)) calc(12*var(--u)*var(--k))}
 .flag.live{background:var(--gold);color:var(--plum)}
-.flag.live i{display:inline-block;width:calc(9*var(--u));height:calc(9*var(--u));border-radius:50%;background:var(--plum);margin-right:calc(8*var(--u));animation:blink 1.4s ease-in-out infinite}
+.flag.live i{display:inline-block;width:calc(9*var(--u)*var(--k));height:calc(9*var(--u)*var(--k));border-radius:50%;background:var(--plum);margin-right:calc(8*var(--u)*var(--k));animation:blink 1.4s ease-in-out infinite}
 @keyframes blink{50%{opacity:.25}}
 .flag.next{border:1px solid var(--gold);color:var(--gold)}
 .s.past{opacity:.55}
-.more{position:absolute;left:50%;bottom:calc(4*var(--u));transform:translateX(-50%);display:flex;align-items:center;gap:calc(10*var(--u));font-size:calc(18*var(--u));color:var(--cream);
+.more{display:none!important;position:absolute;left:50%;bottom:calc(4*var(--u));transform:translateX(-50%);display:flex;align-items:center;gap:calc(10*var(--u));font-size:calc(18*var(--u));color:var(--cream);
   background:rgba(42,8,41,.8);border:1px solid var(--line);border-radius:99px;padding:calc(8*var(--u)) calc(20*var(--u));pointer-events:none;transition:opacity .3s}
 .more svg{width:calc(20*var(--u));height:calc(20*var(--u));animation:nudge 1.6s ease-in-out infinite}
 @keyframes nudge{50%{transform:translateY(calc(5*var(--u)))}}
@@ -196,14 +207,36 @@ main{position:fixed;inset:0;display:grid;place-items:center}
         <div class="tm${tbc ? " tbc" : ""}">${tbc ? "<b>TBC</b><span>Time to be confirmed</span>" : `<b>${s.time}</b><span>to ${s.end}</span>`}</div>
         <div class="bd"><span class="pill">${svg(T.i)}${T.label}</span><h2>${esc(s.title)}</h2><div class="meta">${rows.join("")}</div></div>${flag}</article>`;
     }).join("");
-    const list = $("list"); list.scrollTop = 0;
     if (anim) { const m = document.querySelector(".main"); m.classList.remove("swap"); void m.offsetWidth; m.classList.add("swap"); }
-    const live = list.querySelector(".now") || list.querySelector(".flag.next")?.closest(".s");
-    if (live) setTimeout(() => list.scrollTo({ top: live.offsetTop - 10, behavior: "smooth" }), 500);
-    moreHint();
+    fit();
   }
-  function moreHint() { const l = $("list"); $("more").style.opacity = l.scrollHeight - l.clientHeight - l.scrollTop > 40 ? 1 : 0; }
-  $("list").addEventListener("scroll", moreHint, { passive: true });
+  // fit the whole day on one screen (no scrolling): try 1, 2 and 3 columns, keep the layout with the largest cards
+  function fit() {
+    const list = $("list"), wrap = list.parentElement, avail = wrap.clientHeight;
+    if (!avail) return;
+    const fits = () => { const wb = wrap.getBoundingClientRect(); if (list.offsetHeight > avail) return false;
+      for (const c of list.children) { const r = c.getBoundingClientRect(); if (r.bottom > wb.bottom - 1 || r.right > wb.right + 1) return false; } return true; };
+    let best = null;
+    for (const cols of [1, 2, 3]) {
+      list.style.columnCount = cols;
+      list.classList.toggle("compact", cols > 1);
+      list.style.setProperty("--k", 1);
+      let k = 0;
+      if (fits()) k = 1;
+      else {
+        let lo = 0.4, hi = 1;
+        for (let n = 0; n < 10; n++) { const m = (lo + hi) / 2; list.style.setProperty("--k", m); if (fits()) { k = m; lo = m; } else hi = m; }
+      }
+      if (k && (!best || k > best.k + 0.06)) best = { cols, k };
+      if (k === 1) break;
+    }
+    best = best || { cols: 3, k: 0.4 };
+    list.style.columnCount = best.cols;
+    list.classList.toggle("compact", best.cols > 1);
+    list.style.setProperty("--k", (Math.floor(best.k * 1000) / 1000).toFixed(3));
+  }
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(fit);
+  addEventListener("resize", fit);
 
   // swipe left / right on the session list to change day
   let sx = null, sy = null;

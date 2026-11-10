@@ -191,6 +191,7 @@ main{position:fixed;inset:0;display:grid;place-items:center}
       if (s.spk) rows.push(`<p>${svg(ICON.spk)}<span><b>Speakers:</b> ${esc(s.spk)}</span></p>`);
       if (s.pres) rows.push(`<p>${svg(ICON.spk)}<span><b>Presenter:</b> ${esc(s.pres)}</span></p>`);
       if (s.sp2) rows.push(`<p>${svg(ICON.spk)}<span><b>Speakers / Presenters:</b> ${esc(s.sp2)}</span></p>`);
+      if (s.det) rows.push(`<p>${svg(ICON.org)}<span><b>Details:</b> ${esc(s.det)}</span></p>`);
       return `<article class="s${cls}" style="--c:${T.c};--i:${i}">
         <div class="tm${tbc ? " tbc" : ""}">${tbc ? "<b>TBC</b><span>Time to be confirmed</span>" : `<b>${s.time}</b><span>to ${s.end}</span>`}</div>
         <div class="bd"><span class="pill">${svg(T.i)}${T.label}</span><h2>${esc(s.title)}</h2><div class="meta">${rows.join("")}</div></div>${flag}</article>`;

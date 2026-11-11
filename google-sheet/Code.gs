@@ -16,6 +16,11 @@ const HEAD = ['Timestamp', 'Date', 'Time', 'Name', 'Country', 'Country code', 'L
 function doGet(e) {
   const p = (e && e.parameter) || {};
   if (p.ping) return json_({ ok: true });
+  if (p.ids) {   // kiosks: which visitor IDs the sheet already has (IDs only, no names) so they can re-send anything missing
+    const sh = sheet_(), n = sh.getLastRow() - 1;
+    const ids = n > 0 ? sh.getRange(2, 8, n, 1).getValues().map(r => String(r[0])).filter(String) : [];
+    return json_({ ok: true, ids: ids });
+  }
   if (String(p.key || '') !== STAFF_KEY) return json_({ ok: false, error: 'key' });
   const sh = sheet_();
   const n = sh.getLastRow() - 1;
@@ -58,7 +63,7 @@ function register(rec) {
   const row = [when, "'" + day, "'" + Utilities.formatDate(when, TZ, 'HH:mm'), name, clean(rec.countryName || code), code,
                rec && rec.lang === 'ar' ? 'Arabic' : 'English', id, "'" + day, hour];
   const lock = LockService.getScriptLock();
-  lock.waitLock(15000);
+  if (!lock.tryLock(30000)) throw new Error('busy');   // the kiosk keeps the visitor and sends it again
   try {
     const sh = sheet_();
     const n = sh.getLastRow() - 1;

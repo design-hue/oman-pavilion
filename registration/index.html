@@ -77,19 +77,58 @@ const SHEET_URL = "https://script.google.com/macros/s/AKfycbzwMsmOE8fIHqdQtQQ7b0
     finally { clearTimeout(t); }
   }
   let sending = false;
+  // Each visitor is sent to the Google Sheet and only marked as sent once the sheet answers "ok".
+  // If the sheet is busy or returns an error, the visitor stays in the queue and is sent again later.
+  async function post(rec) {
+    const body = JSON.stringify(rec);
+    try {
+      const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 30000);
+      try {
+        const res = await fetch(SHEET_URL, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body, signal: ctl.signal });
+        const j = await res.json();
+        if (j && j.ok) return "ok";
+        return /Missing name or country/.test(j && j.error || "") ? "drop" : "retry";
+      } finally { clearTimeout(t); }
+    } catch (e) {
+      if (!navigator.onLine) return "offline";
+      // the answer could not be read (some browsers block it): send the old way; the check below catches anything that did not arrive
+      try { await fetch(SHEET_URL, { method: "POST", mode: "no-cors", headers: { "Content-Type": "text/plain;charset=utf-8" }, body }); return "ok"; }
+      catch (e2) { return "offline"; }
+    }
+  }
   async function send() {
     if (!SHEET_URL || sending) return; sending = true;
     try {
       let q = get(QKEY, "[]");
       while (q.length) {
-        try { await fetch(SHEET_URL, { method: "POST", mode: "no-cors", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify(q[0]) }); }
-        catch (e) { break; }
+        const r = await post(q[0]);
+        if (r === "offline" || r === "retry") break;
         if (q[0].id) { const done = get(SYNC, "[]"); done.push(q[0].id); put(SYNC, done); }
-        q.shift(); put(QKEY, q);
+        q = get(QKEY, "[]"); q.shift(); put(QKEY, q);
       }
     } finally { sending = false; }
   }
+  // Every few minutes: ask the sheet which visitor IDs it has, and send again any visitor kept on this device that is missing.
+  async function reconcile() {
+    if (!SHEET_URL) return;
+    try {
+      await ready;
+      const res = await fetch(SHEET_URL + "?ids=1&t=" + Date.now());
+      const j = await res.json();
+      if (!j || !j.ok || !Array.isArray(j.ids)) return;
+      const have = new Set(j.ids.map(ckey));
+      const q = get(QKEY, "[]"), queued = new Set(q.map(r => r.id)), old = Date.now() - 180000;
+      let add = 0;
+      get(KEY, "[]").forEach(r => {
+        r.id = rid(r);
+        if (norm(r).day >= EVENT_START && !have.has(ckey(r.id)) && !queued.has(r.id) && new Date(r.ts).getTime() < old) { q.push(r); add++; }
+      });
+      if (add) { put(QKEY, q); send(); }
+      central.recovered = (central.recovered || 0) + add;
+    } catch (e) {}
+  }
   setInterval(send, 20000); window.addEventListener("online", send); send();
+  setTimeout(reconcile, 15000); setInterval(reconcile, 300000);
   window.kioskAPI = {
     async register(rec) {
       await ready;

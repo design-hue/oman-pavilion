@@ -22,7 +22,7 @@ const SHEET_URL = "https://script.google.com/macros/s/AKfycbzwMsmOE8fIHqdQtQQ7b0
   const get = (k, d) => { try { return JSON.parse(localStorage.getItem(k) || d); } catch (e) { return JSON.parse(d); } };
   const put = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); return localStorage.getItem(k) === JSON.stringify(v); } catch (e) { return false; } };
   let dn = null; try { dn = new Intl.DisplayNames(["en"], { type: "region" }); } catch (e) {}
-  const country = c => { try { return (dn && dn.of(c)) || c; } catch (e) { return c; } };
+  const country = c => { if (c === "PS") return "Palestine"; try { return (dn && dn.of(c)) || c; } catch (e) { return c; } };
   const pad = n => String(n).padStart(2, "0");
   // Every day and hour is counted in the event's time zone, even if a device's clock is set to another zone.
   const fD = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Istanbul", year: "numeric", month: "2-digit", day: "2-digit" });
@@ -194,7 +194,7 @@ const SHEET_URL = "https://script.google.com/macros/s/AKfycbzwMsmOE8fIHqdQtQQ7b0
     async exportCsv() {
       const esc = v => { const s = String(v == null ? "" : v); return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
       const fT = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Istanbul", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
-      const rows = (await this.list()).map(r => { const d = new Date(r.ts); return [r.day, fT.format(d), r.name, r.countryName || country(r.country), r.country, r.lang === "ar" ? "Arabic" : "English"].map(esc).join(","); });
+      const rows = (await this.list()).map(r => { const d = new Date(r.ts); return [r.day, fT.format(d), r.name, (r.country === "PS" ? country("PS") : (r.countryName || country(r.country))), r.country, r.lang === "ar" ? "Arabic" : "English"].map(esc).join(","); });
       const blob = new Blob(["﻿" + ["Date,Time,Name,Country,Country code,Language", ...rows].join("\r\n")], { type: "text/csv;charset=utf-8" });
       const a = document.createElement("a"); const d = new Date();
       a.href = URL.createObjectURL(blob); a.download = `oman-pavilion-visitors-${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}.csv`;
@@ -485,10 +485,10 @@ const T = {
         backIn: s => `العودة إلى البداية خلال ${s} ثانية`, finish: "تم", still: "هل ما زلت هنا؟", stillP: "سيبدأ التسجيل من جديد خلال ثوانٍ.", cont: "متابعة" }
 };
 const POPULAR = ["OM", "TR", "AU", "SA", "AE", "QA", "KW", "BH", "EG", "IN", "GB", "US"];
-const CODES = ("AF AX AL DZ AS AD AO AI AQ AG AR AM AW AU AT AZ BS BH BD BB BY BE BZ BJ BM BT BO BQ BA BW BR IO BN BG BF BI CV KH CM CA KY CF TD CL CN CX CC CO KM CG CD CK CR CI HR CU CW CY CZ DK DJ DM DO EC EG SV GQ ER EE SZ ET FK FO FJ FI FR GF PF GA GM GE DE GH GI GR GL GD GP GU GT GG GN GW GY HT VA HN HK HU IS IN ID IR IQ IE IM IL IT JM JP JE JO KZ KE KI KP KR KW KG LA LV LB LS LR LY LI LT LU MO MG MW MY MV ML MT MH MQ MR MU YT MX FM MD MC MN ME MS MA MZ MM NA NR NP NL NC NZ NI NE NG NU NF MK MP NO OM PK PW PS PA PG PY PE PH PN PL PT PR QA RE RO RU RW BL SH KN LC MF PM VC WS SM ST SA SN RS SC SL SG SX SK SI SB SO ZA GS SS ES LK SD SR SJ SE CH SY TW TJ TZ TH TL TG TK TO TT TN TR TM TC TV UG UA AE GB US UM UY UZ VU VE VN VG VI WF EH YE ZM ZW").split(" ");
+const CODES = ("AF AX AL DZ AS AD AO AI AQ AG AR AM AW AU AT AZ BS BH BD BB BY BE BZ BJ BM BT BO BQ BA BW BR IO BN BG BF BI CV KH CM CA KY CF TD CL CN CX CC CO KM CG CD CK CR CI HR CU CW CY CZ DK DJ DM DO EC EG SV GQ ER EE SZ ET FK FO FJ FI FR GF PF GA GM GE DE GH GI GR GL GD GP GU GT GG GN GW GY HT VA HN HK HU IS IN ID IR IQ IE IM IT JM JP JE JO KZ KE KI KP KR KW KG LA LV LB LS LR LY LI LT LU MO MG MW MY MV ML MT MH MQ MR MU YT MX FM MD MC MN ME MS MA MZ MM NA NR NP NL NC NZ NI NE NG NU NF MK MP NO OM PK PW PS PA PG PY PE PH PN PL PT PR QA RE RO RU RW BL SH KN LC MF PM VC WS SM ST SA SN RS SC SL SG SX SK SI SB SO ZA GS SS ES LK SD SR SJ SE CH SY TW TJ TZ TH TL TG TK TO TT TN TR TM TC TV UG UA AE GB US UM UY UZ VU VE VN VG VI WF EH YE ZM ZW").split(" ");
 let DN_EN = null, DN_AR = null;
 try { DN_EN = new Intl.DisplayNames(["en"], { type: "region" }); DN_AR = new Intl.DisplayNames(["ar"], { type: "region" }); } catch (e) {}
-const cname = (code, lang) => { try { const dn = lang === "ar" ? DN_AR : DN_EN; return (dn && dn.of(code)) || code; } catch (e) { return code; } };
+const cname = (code, lang) => { if (code === "PS") return lang === "ar" ? "فلسطين" : "Palestine"; try { const dn = lang === "ar" ? DN_AR : DN_EN; return (dn && dn.of(code)) || code; } catch (e) { return code; } };
 const COUNTRIES = CODES.map(c => ({ c, en: cname(c, "en"), ar: cname(c, "ar") })).sort((a, b) => a.en.localeCompare(b.en));
 const norm = s => (s || "").toLowerCase().normalize("NFD").replace(/[̀-ًͯ-ْ]/g, "").replace(/[أإآ]/g, "ا").replace(/ة/g, "ه").replace(/ى/g, "ي");
 const KB = {

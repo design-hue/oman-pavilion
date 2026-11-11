@@ -60,7 +60,7 @@ function register(rec) {
   if (day < EVENT_START) return { ok: true, skipped: 'before event' };
   const hour = Number(Utilities.formatDate(when, TZ, 'H'));
   // the leading ' keeps Sheets from turning the date/time text into date values
-  const row = [when, "'" + day, "'" + Utilities.formatDate(when, TZ, 'HH:mm'), name, clean(rec.countryName || code), code,
+  const row = [when, "'" + day, "'" + Utilities.formatDate(when, TZ, 'HH:mm'), name, code === 'PS' ? 'Palestine' : clean(rec.countryName || code), code,
                rec && rec.lang === 'ar' ? 'Arabic' : 'English', id, "'" + day, hour];
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(30000)) throw new Error('busy');   // the kiosk keeps the visitor and sends it again
@@ -118,6 +118,16 @@ function cleanup() {
   } finally {
     lock.releaseLock();
   }
+}
+
+/** One-off: show every Palestine row as "Palestine" in the Country column. */
+function fixPalestine() {
+  const sh = sheet_(), n = sh.getLastRow() - 1;
+  if (n < 1) return 0;
+  const r = sh.getRange(2, 5, n, 2), v = r.getValues(); let c = 0;
+  v.forEach(x => { if (x[1] === 'PS' && x[0] !== 'Palestine') { x[0] = 'Palestine'; c++; } });
+  if (c) sh.getRange(2, 5, n, 1).setValues(v.map(x => [x[0]]));
+  return c;
 }
 
 /** Run once from the editor (select "setup" and press Run) to create the sheets. */

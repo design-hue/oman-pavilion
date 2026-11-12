@@ -194,8 +194,8 @@ const SHEET_URL = "https://script.google.com/macros/s/AKfycbzwMsmOE8fIHqdQtQQ7b0
     async exportCsv() {
       const esc = v => { const s = String(v == null ? "" : v); return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
       const fT = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Istanbul", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
-      const rows = (await this.list()).map(r => { const d = new Date(r.ts); return [r.day, fT.format(d), r.name, (r.country === "PS" ? country("PS") : (r.countryName || country(r.country))), r.country, r.lang === "ar" ? "Arabic" : "English"].map(esc).join(","); });
-      const blob = new Blob(["﻿" + ["Date,Time,Name,Country,Country code,Language", ...rows].join("\r\n")], { type: "text/csv;charset=utf-8" });
+      const rows = (await this.list()).map((r, i) => { const d = new Date(r.ts); return [i + 1, r.day, fT.format(d), r.name, (r.country === "PS" ? country("PS") : (r.countryName || country(r.country))), r.country, r.lang === "ar" ? "Arabic" : "English"].map(esc).join(","); });
+      const blob = new Blob(["﻿" + ["Visitor no.,Date,Time,Name,Country,Country code,Language", ...rows].join("\r\n")], { type: "text/csv;charset=utf-8" });
       const a = document.createElement("a"); const d = new Date();
       a.href = URL.createObjectURL(blob); a.download = `oman-pavilion-visitors-${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}.csv`;
       document.body.append(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
@@ -821,15 +821,16 @@ const Dash = (() => {
     const topC = Object.entries(byCountry).sort((a, b) => b[1] - a[1]);
     const shown = topC.slice(0, 12); const other = topC.slice(12).reduce((s, e) => s + e[1], 0); if (other) shown.push(["__other", other]);
     root.append(el("div", { class: "btns" }, el("div", { class: "seg", role: "group", "aria-label": "Period" }, segBtn("today", "Today"), segBtn("all", "All days"))));
-    const recent = recs.slice(-25).reverse();
+    const recent = recs.map((r, i) => Object.assign({ no: i + 1 }, r)).slice(-25).reverse();   // visitor no. = order of registration across all devices and days
     const tb = el("tbody");
     recent.forEach(r => { const d = new Date(r.ts); tb.append(el("tr", {},
+      el("td", { class: "tab", text: fmt(r.no) }),
       el("td", { text: d.toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: "Europe/Istanbul" }).replace(",", "") }),
       el("td", { dir: "auto", text: r.name }), el("td", { text: cname(r.country, "en") }))); });
     root.append(el("div", { class: "grid2" },
       hbars(shown, "Where visitors come from", scope === "today" ? "Today, top 12 countries" : "All days, top 12 countries", k => k === "__other" ? `Other (${topC.length - 12} countries)` : cname(k, "en")),
       el("div", { class: "panel" }, el("h3", { text: "Latest registrations" }), el("p", { class: "cap", text: "The 25 most recent. Download the CSV for the full list." }),
-        recent.length ? el("div", { class: "tbl-wrap" }, el("table", {}, el("thead", {}, el("tr", {}, ["Time", "Name", "Country"].map(h => el("th", { text: h })))), tb))
+        recent.length ? el("div", { class: "tbl-wrap" }, el("table", {}, el("thead", {}, el("tr", {}, ["No.", "Time", "Name", "Country"].map(h => el("th", { text: h })))), tb))
                       : el("p", { class: "blank", text: "Registrations will appear here." }))));
 
     if (API && API.setStartup) {

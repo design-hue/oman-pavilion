@@ -16,6 +16,18 @@ const SHEET_URL = "https://script.google.com/macros/s/AKfycbzwMsmOE8fIHqdQtQQ7b0
      every save is read back to check it worked, and the browser is asked to keep the data permanently.
      If one copy is ever cleared, it is restored from the other when the page loads. */
   const KEY = "opr-visitors", QKEY = "opr-sheet-queue", SYNC = "opr-synced", SKEY = "opr-staff-key";
+  // Each device names itself once (or takes ?device=Name from its link) so the report can count registrations per device.
+  const DEVICE = (() => {
+    let d = ""; try { d = (new URLSearchParams(location.search).get("device") || "").trim().slice(0, 40); } catch (e) {}
+    try { if (d) localStorage.setItem("opr-device", d); else d = localStorage.getItem("opr-device") || ""; } catch (e) {}
+    if (!d) {
+      const ua = navigator.userAgent || "", touchMac = /Macintosh/.test(ua) && navigator.maxTouchPoints > 1;
+      const kind = /iPad/.test(ua) || touchMac ? "iPad" : /iPhone/.test(ua) ? "iPhone" : /Android/.test(ua) ? "Android" : /Windows/.test(ua) ? "Windows" : /Macintosh/.test(ua) ? "Mac" : "Device";
+      const abc = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; let tag = ""; for (let i = 0; i < 4; i++) tag += abc[Math.floor(Math.random() * abc.length)];
+      d = kind + "-" + tag; try { localStorage.setItem("opr-device", d); } catch (e) {}
+    }
+    return d;
+  })();
   // Public, view-only report at #report: anyone with that link sees the live report and can download the CSV.
   const REPORT_KEY = "1UB54SUF";
   const isReport = () => location.hash.startsWith("#report");
@@ -80,7 +92,7 @@ const SHEET_URL = "https://script.google.com/macros/s/AKfycbzwMsmOE8fIHqdQtQQ7b0
   // Each visitor is sent to the Google Sheet and only marked as sent once the sheet answers "ok".
   // If the sheet is busy or returns an error, the visitor stays in the queue and is sent again later.
   async function post(rec) {
-    const body = JSON.stringify(rec);
+    const body = JSON.stringify(Object.assign({ device: DEVICE }, rec));
     try {
       const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 30000);
       try {
@@ -135,6 +147,7 @@ const SHEET_URL = "https://script.google.com/macros/s/AKfycbzwMsmOE8fIHqdQtQQ7b0
       const r = { name: String(rec.name || "").trim().slice(0, 80), country: String(rec.country || "").slice(0, 2), countryName: country(rec.country),
                   lang: rec.lang === "ar" ? "ar" : "en", ts: rec.ts || new Date().toISOString(), day: rec.day, hour: rec.hour };
       r.id = "v-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
+      r.device = DEVICE;
       norm(r);
       const all = get(KEY, "[]"); all.push(r);
       const okLocal = put(KEY, all);
@@ -194,8 +207,8 @@ const SHEET_URL = "https://script.google.com/macros/s/AKfycbzwMsmOE8fIHqdQtQQ7b0
     async exportCsv() {
       const esc = v => { const s = String(v == null ? "" : v); return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
       const fT = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Istanbul", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
-      const rows = (await this.list()).map((r, i) => { const d = new Date(r.ts); return [i + 1, r.day, fT.format(d), r.name, (r.country === "PS" ? country("PS") : (r.countryName || country(r.country))), r.country, r.lang === "ar" ? "Arabic" : "English"].map(esc).join(","); });
-      const blob = new Blob(["﻿" + ["Visitor no.,Date,Time,Name,Country,Country code,Language", ...rows].join("\r\n")], { type: "text/csv;charset=utf-8" });
+      const rows = (await this.list()).map((r, i) => { const d = new Date(r.ts); return [i + 1, r.day, fT.format(d), r.name, (r.country === "PS" ? country("PS") : (r.countryName || country(r.country))), r.country, r.lang === "ar" ? "Arabic" : "English", r.device || ""].map(esc).join(","); });
+      const blob = new Blob(["﻿" + ["Visitor no.,Date,Time,Name,Country,Country code,Language,Device", ...rows].join("\r\n")], { type: "text/csv;charset=utf-8" });
       const a = document.createElement("a"); const d = new Date();
       a.href = URL.createObjectURL(blob); a.download = `oman-pavilion-visitors-${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}.csv`;
       document.body.append(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
@@ -832,6 +845,13 @@ const Dash = (() => {
       el("div", { class: "panel" }, el("h3", { text: "Latest registrations" }), el("p", { class: "cap", text: "The 25 most recent. Download the CSV for the full list." }),
         recent.length ? el("div", { class: "tbl-wrap" }, el("table", {}, el("thead", {}, el("tr", {}, ["No.", "Time", "Name", "Country"].map(h => el("th", { text: h })))), tb))
                       : el("p", { class: "blank", text: "Registrations will appear here." }))));
+
+    const byDev = {}; sel.forEach(r => { const k = r.device || "__none"; byDev[k] = (byDev[k] || 0) + 1; });
+    const devE = Object.entries(byDev).sort((a, b) => (a[0] === "__none") - (b[0] === "__none") || b[1] - a[1]);
+    const devN = devE.filter(e => e[0] !== "__none").length;
+    root.append(el("div", {},
+      hbars(devE, "Registrations by device", (scope === "today" ? "Today" : "All days") + " · " + devN + (devN === 1 ? " device" : " devices") + " sending registrations",
+        k => k === "__none" ? "Before devices were named (12 Nov)" : k)));
 
     if (API && API.setStartup) {
       root.append(el("div", { class: "panel" }, el("h3", { text: "This computer" }),

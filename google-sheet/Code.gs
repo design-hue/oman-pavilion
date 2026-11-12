@@ -10,7 +10,7 @@ const STAFF_KEY = 'CHANGE-ME';
 const SHEET = 'Visitors';
 const TZ = 'Europe/Istanbul';     // event time zone: every day/hour is counted in this zone, whatever a device's clock zone is
 const EVENT_START = '2026-11-09';  // registrations from before the event (tests) are not kept
-const HEAD = ['Timestamp', 'Date', 'Time', 'Name', 'Country', 'Country code', 'Language', 'ID', 'Day', 'Hour'];
+const HEAD = ['Timestamp', 'Date', 'Time', 'Name', 'Country', 'Country code', 'Language', 'ID', 'Day', 'Hour', 'Device'];   // column L holds the shared Visitor no. formula
 
 /** Dashboard: GET ?key=STAFF_KEY  ->  JSON list of all visitors. */
 function doGet(e) {
@@ -29,7 +29,7 @@ function doGet(e) {
     const ts = r[0] instanceof Date ? r[0] : new Date(r[0]);
     return { ts: ts.toISOString(), name: String(r[3]).replace(/^'/, ''), countryName: String(r[4]), country: String(r[5]),
              lang: r[6] === 'Arabic' ? 'ar' : 'en', id: String(r[7] || ''),
-             day: Utilities.formatDate(ts, TZ, 'yyyy-MM-dd'), hour: Number(Utilities.formatDate(ts, TZ, 'H')) };
+             day: Utilities.formatDate(ts, TZ, 'yyyy-MM-dd'), hour: Number(Utilities.formatDate(ts, TZ, 'H')), device: String(r[10] || '') };
   });
   return json_({ ok: true, visitors: out });
 }
@@ -61,7 +61,7 @@ function register(rec) {
   const hour = Number(Utilities.formatDate(when, TZ, 'H'));
   // the leading ' keeps Sheets from turning the date/time text into date values
   const row = [when, "'" + day, "'" + Utilities.formatDate(when, TZ, 'HH:mm'), name, code === 'PS' ? 'Palestine' : clean(rec.countryName || code), code,
-               rec && rec.lang === 'ar' ? 'Arabic' : 'English', id, "'" + day, hour];
+               rec && rec.lang === 'ar' ? 'Arabic' : 'English', id, "'" + day, hour, clean(rec.device || '')];
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(30000)) throw new Error('busy');   // the kiosk keeps the visitor and sends it again
   try {
@@ -108,7 +108,7 @@ function cleanup() {
       const day = Utilities.formatDate(t, TZ, 'yyyy-MM-dd');
       if (day < EVENT_START) return;
       keep.push([t, "'" + day, "'" + Utilities.formatDate(t, TZ, 'HH:mm'), r[3], r[4], r[5], r[6],
-                 r[7] || (t.toISOString() + '|' + String(r[3]) + '|' + r[5]).slice(0, 80), "'" + day, Number(Utilities.formatDate(t, TZ, 'H'))]);
+                 r[7] || (t.toISOString() + '|' + String(r[3]) + '|' + r[5]).slice(0, 80), "'" + day, Number(Utilities.formatDate(t, TZ, 'H')), r[10] || '']);
     });
     keep.sort((a, b) => a[0] - b[0]);
     sh.getRange(2, 1, n, HEAD.length).clearContent();
